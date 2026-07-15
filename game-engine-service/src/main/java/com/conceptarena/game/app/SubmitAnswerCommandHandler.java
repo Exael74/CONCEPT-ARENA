@@ -1,0 +1,88 @@
+package com.conceptarena.game.app;
+
+import com.conceptarena.game.app.bus.CommandHandler;
+import com.conceptarena.game.app.bus.EventBus;
+import com.conceptarena.game.app.readmodel.RoomReadModelPort;
+import com.conceptarena.game.domain.Answer;
+import com.conceptarena.game.domain.Round;
+import com.conceptarena.game.domain.command.SubmitAnswerCommand;
+import com.conceptarena.game.domain.event.AnswerRejected;
+import com.conceptarena.game.domain.event.AnswerSubmitted;
+import org.springframework.stereotype.Service;
+
+/**
+ * Rewritten against RoomReadModelPort.isParticipant instead of the monolith's
+ * RoomRepository.findById(...).findParticipant(...) — see ADR-004. This is a security-relevant
+ * check (anti-cheat/authorization), so the read-model consumer's idempotent upsert semantics
+ * matter here: a stale-by-milliseconds local view is acceptable, an unavailable room-service is
+ * not (the whole point of decoupling this check from a synchronous call).
+ */
+@Service
+public class SubmitAnswerCommandHandler implements CommandHandler<SubmitAnswerCommand, Void> {
+
+    private static final int MAX_ANSWER_LENGTH = 500;
+
+    private final EventBus eventBus;
+    private final RoundRepository roundRepository;
+    private final RoomReadModelPort roomReadModelPort;
+    private final AnswerValidationPort answerValidationPort;
+
+    public SubmitAnswerCommandHandler(EventBus eventBus, RoundRepository roundRepository,
+                                       RoomReadModelPort roomReadModelPort, AnswerValidationPort answerValidationPort) {
+        this.eventBus = eventBus;
+        this.roundRepository = roundRepository;
+        this.roomReadModelPort = roomReadModelPort;
+        this.answerValidationPort = answerValidationPort;
+    }
+
+    @Override
+    public Void handle(SubmitAnswerCommand command) {
+        if (command.answerText() == null || command.answerText().isBlank()) {
+            reject(command, "blank_answer");
+            throw new IllegalArgumentException("Answer text must not be empty");
+        }
+        if (command.answerText().length() > MAX_ANSWER_LENGTH) {
+            reject(command, "answer_too_long");
+            throw new IllegalArgumentException("Answer text exceeds maximum length of " + MAX_ANSWER_LENGTH);
+        }
+
+        if (!roomReadModelPort.isParticipant(command.roomId(), command.userId())) {
+            reject(command, "not_a_participant");
+            throw new IllegalStateException("User " + command.userId() + " is not a participant of room " + command.roomId());
+        }
+
+        Round round = roundRepository.findActiveRoundByRoomId(command.roomId()).orElse(null);
+        if (round == null) {
+            reject(command, "no_active_round");
+            throw new IllegalStateException("No active round for room: " + command.roomId());
+        }
+
+        try {
+            round.submitAnswer(command.userId(), command.answerText());
+        } catch (IllegalStateException e) {
+            reject(command, e.getMessage() != null && e.getMessage().contains("expired") ? "round_expired" : "duplicate_answer");
+            throw e;
+        }
+
+        Answer answer = round.getAnswers().get(command.userId());
+        boolean correct = answerValidationPort.isCorrect(command.answerText(), round.getExpectedAnswer());
+        if (correct) {
+            answer.markCorrect();
+        } else {
+            answer.markIncorrect();
+        }
+
+        roundRepository.save(round);
+
+        eventBus.publish(new AnswerSubmitted(
+            round.getId().value(), command.roomId(), command.userId(),
+            command.answerText(), round.getExpectedAnswer()
+        ));
+
+        return null;
+    }
+
+    private void reject(SubmitAnswerCommand command, String reason) {
+        eventBus.publish(new AnswerRejected(command.roomId(), command.userId(), reason));
+    }
+}

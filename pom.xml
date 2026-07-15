@@ -30,6 +30,7 @@
         <module>concept-bank-service</module>
         <module>auth-service</module>
         <module>room-service</module>
+        <module>game-engine-service</module>
     </modules>
 
     <parent>

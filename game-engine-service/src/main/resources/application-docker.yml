@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${GAME_DB_HOST:game-db}:${GAME_DB_PORT:5432}/${GAME_DB_NAME:game}
+    driver-class-name: org.postgresql.Driver
+    username: ${GAME_DB_USER:postgres}
+    password: ${GAME_DB_PASSWORD:postgres}
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        session:
+          events:
+            log:
+              LOG_QUERIES_SLOWER_THAN_MS: 200
+  flyway:
+    locations: classpath:db/migration
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        missing-queues-fatal: false
+
+logging:
+  level:
+    com.conceptarena: INFO
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}   # required — no default, fails fast if unset
