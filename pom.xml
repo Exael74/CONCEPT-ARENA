@@ -29,6 +29,7 @@
         <module>jwt-validation-lib</module>
         <module>concept-bank-service</module>
         <module>auth-service</module>
+        <module>room-service</module>
     </modules>
 
     <parent>
