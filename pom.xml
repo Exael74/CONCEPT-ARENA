@@ -27,6 +27,7 @@
         <!-- new microservices -->
         <module>conceptarena-kernel</module>
         <module>jwt-validation-lib</module>
+        <module>concept-bank-service</module>
     </modules>
 
     <parent>
