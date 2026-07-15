@@ -28,6 +28,7 @@
         <module>conceptarena-kernel</module>
         <module>jwt-validation-lib</module>
         <module>concept-bank-service</module>
+        <module>auth-service</module>
     </modules>
 
     <parent>
