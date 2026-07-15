@@ -1,0 +1,82 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.conceptarena</groupId>
+    <artifactId>conceptarena</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+
+    <name>ConceptArena</name>
+    <description>Plataforma web multijugador de estudio colaborativo en tiempo real - Event Driven Architecture</description>
+
+    <modules>
+        <module>core</module>
+        <module>app</module>
+        <module>infra</module>
+        <module>web</module>
+        <module>bootstrap</module>
+    </modules>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.4</version>
+        <relativePath/>
+    </parent>
+
+    <properties>
+        <java.version>17</java.version>
+        <maven.compiler.source>${java.version}</maven.compiler.source>
+        <maven.compiler.target>${java.version}</maven.compiler.target>
+        <jjwt.version>0.12.6</jjwt.version>
+        <!-- The Mockito/ByteBuddy versions pinned by spring-boot-starter-parent 3.2.4
+             don't support mocking classes on newer JDKs (e.g. JDK 23); bump both. -->
+        <mockito.version>5.14.2</mockito.version>
+        <byte-buddy.version>1.15.11</byte-buddy.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.conceptarena</groupId>
+                <artifactId>core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.conceptarena</groupId>
+                <artifactId>app</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.conceptarena</groupId>
+                <artifactId>infra</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.conceptarena</groupId>
+                <artifactId>web</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+                <scope>runtime</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+</project>

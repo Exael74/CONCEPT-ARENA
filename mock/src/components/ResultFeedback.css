@@ -1,0 +1,56 @@
+.result-feedback {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+  border-radius: 20px;
+  max-width: 520px;
+  width: 100%;
+  animation: slideUp 0.3s ease-out;
+}
+
+.result-feedback.correct {
+  background: rgba(51, 255, 119, 0.08);
+  border: 1px solid rgba(51, 255, 119, 0.25);
+}
+
+.result-feedback.wrong {
+  background: rgba(255, 51, 68, 0.08);
+  border: 1px solid rgba(255, 51, 68, 0.25);
+}
+
+.result-icon {
+  font-size: 2rem;
+}
+
+.result-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.result-status {
+  font-size: 1.1rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.result-feedback.correct .result-status {
+  color: var(--success);
+}
+
+.result-feedback.wrong .result-status {
+  color: var(--danger);
+}
+
+.result-answer {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.result-points {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--amarillo);
+}

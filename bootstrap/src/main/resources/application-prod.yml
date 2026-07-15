@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    driver-class-name: org.postgresql.Driver
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    locations: classpath:db/migration
+
+logging:
+  level:
+    com.conceptarena: INFO
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}   # required in prod — no default, fails fast if unset
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
