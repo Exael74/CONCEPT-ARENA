@@ -11,12 +11,22 @@
     <name>ConceptArena</name>
     <description>Plataforma web multijugador de estudio colaborativo en tiempo real - Event Driven Architecture</description>
 
+    <!-- Modules are split into two groups during the microservices migration:
+         "legacy monolith" modules (kept building/passing tests throughout the migration
+         as the reference implementation, retired once the new services + e2e tests
+         fully supersede them) and "new microservices" modules (added incrementally,
+         one per completed migration phase, per docs/architecture-decisions/). -->
     <modules>
+        <!-- legacy monolith (see above) -->
         <module>core</module>
         <module>app</module>
         <module>infra</module>
         <module>web</module>
         <module>bootstrap</module>
+
+        <!-- new microservices -->
+        <module>conceptarena-kernel</module>
+        <module>jwt-validation-lib</module>
     </modules>
 
     <parent>
@@ -57,6 +67,16 @@
             <dependency>
                 <groupId>com.conceptarena</groupId>
                 <artifactId>web</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.conceptarena</groupId>
+                <artifactId>conceptarena-kernel</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.conceptarena</groupId>
+                <artifactId>jwt-validation-lib</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
