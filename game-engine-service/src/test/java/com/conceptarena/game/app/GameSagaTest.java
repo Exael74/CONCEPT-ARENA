@@ -10,7 +10,6 @@ import static org.mockito.Mockito.when;
 import com.conceptarena.game.app.bus.CommandBus;
 import com.conceptarena.game.app.bus.EventBus;
 import com.conceptarena.game.app.bus.EventHandler;
-import com.conceptarena.game.domain.command.StartRoundCommand;
 import com.conceptarena.game.domain.event.AnswerSubmitted;
 import com.conceptarena.game.domain.event.GameEnded;
 import com.conceptarena.game.domain.event.RoomJoined;
@@ -69,14 +68,39 @@ class GameSagaTest {
     }
 
     @Test
-    void startsFirstRoundOnceTwoParticipantsHaveJoined() {
+    void doesNotAutoStartWhenTwoParticipantsJoin() {
+        // Changed 2026-07-21: the game no longer auto-starts on the 2nd join — only the owner's
+        // explicit POST /start begins the first round. Joining just registers participants.
         String roomId = "room-1";
         roomJoinedHandler.handle(new RoomJoined(roomId, "user-1"));
         roomJoinedHandler.handle(new RoomJoined(roomId, "user-2"));
 
-        ArgumentCaptor<StartRoundCommand> captor = ArgumentCaptor.forClass(StartRoundCommand.class);
-        verify(commandBus).dispatch(captor.capture());
-        assertThat(captor.getValue().roomId()).isEqualTo(roomId);
+        verify(commandBus, never()).dispatch(any());
+    }
+
+    @Test
+    void doesNotReleaseTheRoundEndGuardWhenARoundEnds() {
+        // Regression for the "answering blocked after a few rounds" bug: releasing the guard on
+        // round-end let this round's still-running 30s timer re-claim and re-end it, dispatching a
+        // duplicate next-round start (two rounds ACTIVE at once). The claim must stay held.
+        String roomId = "room-1";
+        String roundId = "round-1";
+        when(roundRepository.findById(roundId)).thenReturn(Optional.empty());
+
+        roomJoinedHandler.handle(new RoomJoined(roomId, "user-1"));
+        roomJoinedHandler.handle(new RoomJoined(roomId, "user-2"));
+        roundStartedHandler.handle(new RoundStarted(roundId, roomId, "question", 1, 30));
+
+        // Both answer -> early-end claims the guard for round-1.
+        answerSubmittedHandler.handle(new AnswerSubmitted(roundId, roomId, "user-1", "a", "expected"));
+        answerSubmittedHandler.handle(new AnswerSubmitted(roundId, roomId, "user-2", "a", "expected"));
+        assertThat(roundEndGuard.tryClaim(roundId)).isFalse(); // already claimed by early-end
+
+        // Drive onRoundEnded directly (the mocked eventBus doesn't route it back).
+        roundEndedHandler.handle(new RoundEnded(roundId, roomId, Map.of(), Map.of()));
+
+        // Still claimed — a late timer for round-1 can never re-end it.
+        assertThat(roundEndGuard.tryClaim(roundId)).isFalse();
     }
 
     @Test

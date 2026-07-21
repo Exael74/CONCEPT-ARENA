@@ -29,13 +29,15 @@ class RoundEndGuardTest {
     }
 
     @Test
-    void releaseAllowsTheRoundToBeClaimedAgain() {
+    void aClaimIsNeverImplicitlyReleasedSoLateTimersCannotReEndTheRound() {
+        // The guard has no release(): once a round is claimed (ended), every later attempt — e.g. a
+        // stale 30s timer firing after an early end — must keep failing for the round's lifetime.
         RoundEndGuard guard = new com.conceptarena.game.infra.state.InMemoryRoundEndGuard();
-        guard.tryClaim("round-1");
-
-        guard.release("round-1");
 
         assertThat(guard.tryClaim("round-1")).isTrue();
+        for (int i = 0; i < 5; i++) {
+            assertThat(guard.tryClaim("round-1")).isFalse();
+        }
     }
 
     @Test

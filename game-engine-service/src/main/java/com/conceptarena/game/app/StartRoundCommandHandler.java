@@ -8,6 +8,7 @@ import com.conceptarena.game.app.readmodel.RoomReadModelPort;
 import com.conceptarena.game.app.readmodel.RoomReadModelPort.RoomSnapshot;
 import com.conceptarena.game.domain.Round;
 import com.conceptarena.game.domain.command.StartRoundCommand;
+import com.conceptarena.game.domain.error.GameAlreadyInProgressException;
 import com.conceptarena.game.domain.error.NotRoomOwnerException;
 import com.conceptarena.game.domain.event.RoundStarted;
 import java.time.Duration;
@@ -45,8 +46,17 @@ public class StartRoundCommandHandler implements CommandHandler<StartRoundComman
         // this check. A null creatorUserId means the room predates this field (no backfill possible
         // for room-service's Redis-held state) — fails open rather than permanently locking it.
         boolean isSystem = StartRoundCommand.SYSTEM_TRIGGERED.equals(command.triggeredByUserId());
-        if (!isSystem && room.creatorUserId() != null && !room.creatorUserId().equals(command.triggeredByUserId())) {
-            throw new NotRoomOwnerException(command.roomId());
+        if (!isSystem) {
+            if (room.creatorUserId() != null && !room.creatorUserId().equals(command.triggeredByUserId())) {
+                throw new NotRoomOwnerException(command.roomId());
+            }
+            // Idempotency for the owner's explicit start: if a round is already active (double-click,
+            // or the game is already running), reject cleanly instead of creating a duplicate active
+            // round. The system-triggered next-round path skips this: it always runs after the prior
+            // round is ENDED, so no active round exists at that point.
+            if (roundRepository.findActiveRoundByRoomId(command.roomId()).isPresent()) {
+                throw new GameAlreadyInProgressException(command.roomId());
+            }
         }
 
         ConceptSnapshot concept = conceptBankReadModelPort.pickRandomConcept(room.conceptBankId())

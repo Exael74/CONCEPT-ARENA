@@ -11,6 +11,8 @@ import com.conceptarena.game.app.GameSaga;
 import com.conceptarena.game.app.RoundRepository;
 import com.conceptarena.game.app.bus.CommandBus;
 import com.conceptarena.game.domain.Round;
+import com.conceptarena.game.domain.error.GameAlreadyInProgressException;
+import com.conceptarena.game.domain.error.NotRoomOwnerException;
 import com.conceptarena.game.infra.ws.AnswerRateLimiter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -40,6 +42,31 @@ class GameControllerTest {
 
     private static Principal principal(String userId) {
         return () -> userId;
+    }
+
+    @Test
+    void startRoundReturnsOkForTheOwner() throws Exception {
+        mockMvc.perform(post("/api/game/{roomId}/start", "room-1").principal(principal("owner-1")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    void startRoundReturnsForbiddenForNonOwner() throws Exception {
+        when(commandBus.dispatch(any())).thenThrow(new NotRoomOwnerException("room-1"));
+
+        mockMvc.perform(post("/api/game/{roomId}/start", "room-1").principal(principal("intruder")))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    void startRoundReturnsConflictWhenAlreadyInProgress() throws Exception {
+        when(commandBus.dispatch(any())).thenThrow(new GameAlreadyInProgressException("room-1"));
+
+        mockMvc.perform(post("/api/game/{roomId}/start", "room-1").principal(principal("owner-1")))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.success").value(false));
     }
 
     @Test

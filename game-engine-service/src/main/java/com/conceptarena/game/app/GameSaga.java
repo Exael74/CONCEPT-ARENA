@@ -24,10 +24,14 @@ import org.springframework.stereotype.Service;
 /**
  * Orchestrates a game session across multiple rounds.
  * - Tracks participants per room.
- * - Starts rounds automatically when >=2 participants join.
+ * - Does NOT auto-start: the FIRST round begins only when the room's creator explicitly calls
+ *   POST /api/game/{roomId}/start (StartRoundCommandHandler enforces creator-only). This lets the
+ *   owner wait until everyone has joined so all players receive the first RoundStarted broadcast
+ *   together, instead of the game kicking off the instant a 2nd player joined (changed 2026-07-21).
  * - Detects early round-end: when ALL participants have answered, publishes RoundEnded
  *   immediately (HU-07) so the timer doesn't have to expire.
- * - On RoundEnded: accumulates scores and starts the next round or ends the game (HU-09).
+ * - On RoundEnded: accumulates scores and starts the NEXT round automatically (system-triggered)
+ *   or ends the game (HU-09).
  *
  * Unchanged from the monolith except for RoomJoined/RoomLeft now being the local, re-published
  * events fed by RoomReadModelEventConsumer (see ADR-004) instead of the shared in-process bus —
@@ -88,11 +92,9 @@ public class GameSaga {
         state.getParticipants().add(event.getUserId());
         state.getScores().putIfAbsent(event.getUserId(), 0);
         gameStateStore.save(state);
-
-        if (state.getParticipants().size() >= 2 && state.getCurrentRound() == 0 && !state.isEnded()) {
-            log.info("SAGA Starting first round for room {} with {} participants", roomId, state.getParticipants().size());
-            commandBus.dispatch(new StartRoundCommand(roomId, StartRoundCommand.SYSTEM_TRIGGERED));
-        }
+        // Deliberately no auto-start: the first round starts only when the owner calls
+        // POST /api/game/{roomId}/start (see class doc). Joining just registers the participant so
+        // scoring/early-end work once the owner does start.
     }
 
     private void onRoomLeft(RoomLeft event) {
@@ -197,7 +199,10 @@ public class GameSaga {
         );
 
         gameStateStore.clearAnswered(event.getAggregateId());
-        roundEndGuard.release(event.getAggregateId());
+        // NB: the round-end guard is deliberately NOT released here — see RoundEndGuard. Releasing
+        // it let this round's own still-running timer re-claim and re-end it, dispatching a
+        // duplicate next-round start (two rounds ACTIVE at once → answering blocked for the players
+        // split across them). The claim's TTL bounds memory instead.
 
         if (state.getCurrentRound() >= state.getTotalRounds()) {
             state.setEnded(true);

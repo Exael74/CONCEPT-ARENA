@@ -14,8 +14,10 @@ import com.conceptarena.game.app.readmodel.RoomReadModelPort.RoomSnapshot;
 import com.conceptarena.game.domain.Round;
 import com.conceptarena.game.domain.RoundStatus;
 import com.conceptarena.game.domain.command.StartRoundCommand;
+import com.conceptarena.game.domain.error.GameAlreadyInProgressException;
 import com.conceptarena.game.domain.error.NotRoomOwnerException;
 import com.conceptarena.game.domain.event.RoundStarted;
+import java.time.Duration;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -103,6 +105,34 @@ class StartRoundCommandHandlerTest {
         assertThatThrownBy(() -> handler.handle(new StartRoundCommand("room-1", "someone-else")))
             .isInstanceOf(NotRoomOwnerException.class);
         verify(roundRepository, org.mockito.Mockito.never()).save(any(Round.class));
+    }
+
+    @Test
+    void rejectsExplicitStartWhenARoundIsAlreadyActive() {
+        // Owner double-click / start-while-running: must not create a second ACTIVE round.
+        RoomSnapshot room = new RoomSnapshot("room-1", "creator-1", "bank-1", 4, false);
+        when(roomReadModelPort.findByRoomId("room-1")).thenReturn(Optional.of(room));
+        when(roundRepository.findActiveRoundByRoomId("room-1"))
+            .thenReturn(Optional.of(new Round("room-1", "q", "a", 1, Duration.ofSeconds(30))));
+
+        assertThatThrownBy(() -> handler.handle(new StartRoundCommand("room-1", "creator-1")))
+            .isInstanceOf(GameAlreadyInProgressException.class);
+        verify(roundRepository, org.mockito.Mockito.never()).save(any(Round.class));
+    }
+
+    @Test
+    void systemTriggeredStartSkipsTheAlreadyActiveCheck() {
+        // The next-round progression (system-triggered) always runs after the prior round ENDED,
+        // so it must not be blocked by the owner-only "already in progress" guard.
+        RoomSnapshot room = new RoomSnapshot("room-1", "creator-1", "bank-1", 4, false);
+        when(roomReadModelPort.findByRoomId("room-1")).thenReturn(Optional.of(room));
+        when(conceptBankReadModelPort.pickRandomConcept("bank-1"))
+            .thenReturn(Optional.of(new ConceptSnapshot("What is OOP?", "object oriented programming", 3)));
+
+        handler.handle(new StartRoundCommand("room-1", StartRoundCommand.SYSTEM_TRIGGERED));
+
+        verify(roundRepository).save(any(Round.class));
+        verify(roundRepository, org.mockito.Mockito.never()).findActiveRoundByRoomId(any());
     }
 
     @Test

@@ -27,13 +27,22 @@ import org.springframework.stereotype.Component;
 public class ScheduledTimerAdapter implements TimerPort {
 
     private static final Logger log = LoggerFactory.getLogger(ScheduledTimerAdapter.class);
+
     private final EventBus eventBus;
     private final RoundRepository roundRepository;
     private final RoundEndGuard roundEndGuard;
     private final SimpMessagingTemplate messaging;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(8);
-    private final Map<String, ScheduledFuture<?>> roundTimers = new ConcurrentHashMap<>();
-    private final Map<String, ScheduledFuture<?>> tickTimers = new ConcurrentHashMap<>();
+
+    // One entry per room, holding both timers for that room's CURRENT round. The entry carries its
+    // roundId so that a stale round's timeout task — which can still fire after the round ended,
+    // since ScheduledFuture.cancel(false) does not stop an already-running task — can tell it's no
+    // longer the current round and leave the newer round's timers untouched. Keying/cleaning by
+    // roomId alone (the previous design) let a zombie round-N task cancel round N+1's tick (frozen
+    // countdown) and untrack its timer (found alongside the duplicate-round bug, 2026-07-21).
+    private final Map<String, RoundTimers> timersByRoom = new ConcurrentHashMap<>();
+
+    private record RoundTimers(String roundId, ScheduledFuture<?> tick, ScheduledFuture<?> end) {}
 
     public ScheduledTimerAdapter(EventBus eventBus, RoundRepository roundRepository,
                                   RoundEndGuard roundEndGuard, SimpMessagingTemplate messaging) {
@@ -49,68 +58,76 @@ public class ScheduledTimerAdapter implements TimerPort {
     }
 
     private void onRoundStarted(RoundStarted event) {
-        cancelTimers(event.getRoomId());
+        String roomId = event.getRoomId();
+        String roundId = event.getAggregateId();
+        cancelTimers(roomId); // stop the previous round's timers, if any
 
         // Periodic 1-second tick to /topic/rooms/{id}/timer
-        ScheduledFuture<?> tickFuture = scheduler.scheduleAtFixedRate(() -> {
-            messaging.convertAndSend("/topic/rooms/" + event.getRoomId() + "/timer",
-                Map.of("type", "TICK", "roundId", event.getAggregateId()));
-        }, 1, 1, TimeUnit.SECONDS);
-        tickTimers.put(event.getRoomId(), tickFuture);
+        ScheduledFuture<?> tickFuture = scheduler.scheduleAtFixedRate(() ->
+            messaging.convertAndSend("/topic/rooms/" + roomId + "/timer",
+                Map.of("type", "TICK", "roundId", roundId)),
+            1, 1, TimeUnit.SECONDS);
 
-        // Round end timer
-        ScheduledFuture<?> roundFuture = scheduler.schedule(() -> {
-            cancelTick(event.getRoomId());
+        // Round-end timer
+        ScheduledFuture<?> endFuture = scheduler.schedule(
+            () -> endRoundOnTimeout(roomId, roundId),
+            event.getDurationSeconds(), TimeUnit.SECONDS);
 
-            if (!roundEndGuard.tryClaim(event.getAggregateId())) {
-                // GameSaga already ended this round early (all participants answered in time
-                // between this task being scheduled and firing); skip the duplicate end.
-                log.info("TIMER Round {} already ended early — skipping duplicate timer end.", event.getAggregateId());
-                roundTimers.remove(event.getRoomId());
-                return;
+        timersByRoom.put(roomId, new RoundTimers(roundId, tickFuture, endFuture));
+        log.info("TIMER Started {}s timer for room {} round {}", event.getDurationSeconds(), roomId, roundId);
+    }
+
+    /** Package-private for direct unit testing of the end/skip/cleanup logic without real scheduling. */
+    void endRoundOnTimeout(String roomId, String roundId) {
+        // Cancel this round's tick and drop its entry, but ONLY if the room is still on this round —
+        // if a newer round already replaced the slot, leave its timers alone.
+        clearIfCurrent(roomId, roundId);
+
+        if (!roundEndGuard.tryClaim(roundId)) {
+            // The early-end path (or an already-fired timer) already ended this round; skip.
+            log.info("TIMER Round {} already ended — skipping duplicate timer end.", roundId);
+            return;
+        }
+
+        Round round = roundRepository.findById(roundId).orElse(null);
+        Map<String, Integer> scores = new HashMap<>();
+        Map<String, String> results = new HashMap<>();
+
+        if (round != null) {
+            round = endAndSaveWithRetry(round, roundId);
+            for (Map.Entry<String, Answer> entry : round.getAnswers().entrySet()) {
+                String userId = entry.getKey();
+                Answer answer = entry.getValue();
+                scores.put(userId, ScoringService.calculateScore(round, answer));
+                results.put(userId, answer.getResult().name());
             }
+            log.info("TIMER Round {} ended for room {}. Computed {} scores.", roundId, roomId, scores.size());
+        } else {
+            log.warn("TIMER Round {} not found in DB when ending.", roundId);
+        }
 
-            Round round = roundRepository.findById(event.getAggregateId()).orElse(null);
-            Map<String, Integer> scores = new HashMap<>();
-            Map<String, String> results = new HashMap<>();
-
-            if (round != null) {
-                round = endAndSaveWithRetry(round, event.getAggregateId());
-                for (Map.Entry<String, Answer> entry : round.getAnswers().entrySet()) {
-                    String userId = entry.getKey();
-                    Answer answer = entry.getValue();
-                    int score = ScoringService.calculateScore(round, answer);
-                    scores.put(userId, score);
-                    results.put(userId, answer.getResult().name());
-                }
-                log.info("TIMER Round {} ended for room {}. Computed {} scores.", round.getId().value(), event.getRoomId(), scores.size());
-            } else {
-                log.warn("TIMER Round {} not found in DB when ending.", event.getAggregateId());
-            }
-
-            eventBus.publish(new RoundEnded(event.getAggregateId(), event.getRoomId(), scores, results));
-            roundTimers.remove(event.getRoomId());
-        }, event.getDurationSeconds(), TimeUnit.SECONDS);
-        roundTimers.put(event.getRoomId(), roundFuture);
-
-        log.info("TIMER Started {}s timer for room: {}", event.getDurationSeconds(), event.getRoomId());
+        eventBus.publish(new RoundEnded(roundId, roomId, scores, results));
     }
 
     @Override
     public void cancelTimers(String roomId) {
-        cancelTick(roomId);
-        ScheduledFuture<?> roundFuture = roundTimers.remove(roomId);
-        if (roundFuture != null) {
-            roundFuture.cancel(false);
-            log.info("TIMER Cancelled round timer for room: {}", roomId);
+        RoundTimers removed = timersByRoom.remove(roomId);
+        if (removed != null) {
+            removed.tick().cancel(false);
+            removed.end().cancel(false);
+            log.info("TIMER Cancelled timers for room {} round {}", roomId, removed.roundId());
         }
     }
 
-    private void cancelTick(String roomId) {
-        ScheduledFuture<?> tickFuture = tickTimers.remove(roomId);
-        if (tickFuture != null) {
-            tickFuture.cancel(false);
-        }
+    /** Cancels the tick and removes the entry for (roomId, roundId), but only if that round still owns the room's slot. */
+    private void clearIfCurrent(String roomId, String roundId) {
+        timersByRoom.computeIfPresent(roomId, (room, entry) -> {
+            if (entry.roundId().equals(roundId)) {
+                entry.tick().cancel(false);
+                return null; // this round's timers are done
+            }
+            return entry; // a newer round owns the slot — don't touch it
+        });
     }
 
     /**

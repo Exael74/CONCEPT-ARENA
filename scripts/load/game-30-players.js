@@ -1,10 +1,11 @@
-// k6 load test: 30 concurrent players joining one room and answering rounds.
+// k6 load test: 150 concurrent players joining one room and playing all 5 rounds.
 //
 // Targets the FULL microservices stack through the api-gateway (docker-compose.yml) — not the legacy
 // monolith the first recorded run used. The default BASE_URL is the gateway's published port, and
 // with the docker profile active game-engine-service runs on RedisGameStateStore/RedisRoundEndGuard,
 // so this exercises the externalized-state path the architecture actually ships (audit gap #3), not
-// an in-memory single instance. It measures RPS / p95 / p99 / error-rate for the REST answer path.
+// an in-memory single instance. It measures RPS / p95 / p99 / error-rate for the REST answer path
+// across all 5 rounds of a game.
 //
 // Usage:
 //   1. docker compose up -d --build            # gateway + 6 services + infra (+ observability)
@@ -20,7 +21,9 @@ import encoding from 'k6/encoding';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const MAILHOG_URL = __ENV.MAILHOG_URL || 'http://localhost:8025';
-const PLAYERS = 30;
+const PLAYERS = 150;
+const ROUNDS = 5;
+const ROUND_DURATION_SECONDS = 30;
 
 // http_req_failed must flag SERVER failures (5xx), not the game's legitimate business rejections: a
 // 400 "round not active / already answered / time expired" is a CORRECT response under load, not a
@@ -31,19 +34,19 @@ http.setResponseCallback(http.expectedStatuses({ min: 200, max: 499 }));
 
 export const options = {
     // Found by actually running this script for the first time (audit gap #2 remediation,
-    // 2026-07-15): setup() registers/logs in 30 players sequentially from k6's single client
-    // IP, and auth-service's RateLimitingFilter caps /api/auth/{register,login} combined at 10
-    // req/min per IP (a real, working anti-abuse control, not a bug — see
+    // 2026-07-15): setup() registers/logs in PLAYERS (now 150) players sequentially from k6's
+    // single client IP, and auth-service's RateLimitingFilter caps /api/auth/{register,login}
+    // combined at 10 req/min per IP (a real, working anti-abuse control, not a bug — see
     // RateLimitingFilter.java). At 2 requests/player that's 5 players/window; setup below paces
-    // itself to stay under it, so setup alone now takes minutes, not seconds — bump the default
+    // itself to stay under it, so setup alone takes ~16 min — bump the default
     // 60s setupTimeout accordingly.
-    setupTimeout: '10m',
+    setupTimeout: '30m',
     scenarios: {
-        thirty_players: {
+        one_fifty_players: {
             executor: 'per-vu-iterations',
             vus: PLAYERS,
             iterations: 1,
-            maxDuration: '2m',
+            maxDuration: '45m',
         },
     },
     thresholds: {
@@ -54,6 +57,7 @@ export const options = {
 
 const answerRejections = new Counter('answer_rejections');
 const answerLatency = new Trend('answer_submit_duration_ms');
+const roundStartLatency = new Trend('round_start_latency_ms');
 
 // Fixed-window rate limit is 10 req/min per IP shared across register+login (2 req/player) — 6.5s
 // between players keeps every window under that cap with margin, even near a window boundary.
@@ -65,13 +69,12 @@ export function setup() {
     const bankId = createConceptBank(hostToken);
     const roomId = createRoom(hostToken, bankId);
 
-    const players = [{ token: hostToken, userId: decodeUserId(hostToken) }];
+    const players = [{ token: hostToken }];
     for (let i = 1; i < PLAYERS; i++) {
         sleep(SECONDS_BETWEEN_PLAYER_SETUPS);
         const email = `load-player-${i}-${Date.now()}@escuelaing.edu.co`;
         const token = registerAndLogin(email);
-        joinRoom(token, roomId);
-        players.push({ token, userId: decodeUserId(token) });
+        players.push({ token });
     }
 
     return { roomId, players };
@@ -80,23 +83,49 @@ export function setup() {
 export default function (data) {
     const player = data.players[__VU - 1];
     if (!player) return;
+    // players[0] is the room creator (see setup) — VU numbering is 1-based, so VU 1 is the host.
+    const isHost = __VU === 1;
 
-    sleep(1); // let the round auto-start once all participants have joined
-
-    // userId is no longer sent — GameController.submitAnswer takes it from the authenticated
-    // principal (JWT), not the request body (audit gap #1 remediation).
-    const res = http.post(
-        `${BASE_URL}/api/game/${data.roomId}/answer`,
-        JSON.stringify({ answerText: 'load-test-answer' }),
-        {
+    // The host already joined by creating the room; the rest join now.
+    if (!isHost) {
+        http.post(`${BASE_URL}/api/rooms/${data.roomId}/join`, null, {
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${player.token}` },
-        }
-    );
+        });
+    }
 
-    answerLatency.add(res.timings.duration);
-    const ok = check(res, { 'answer submit is 2xx or 4xx (not 5xx)': (r) => r.status < 500 });
-    if (!ok || res.status >= 400) {
-        answerRejections.add(1);
+    // The game no longer auto-starts on the 2nd join (changed 2026-07-21) — only the room creator
+    // can start it (POST /api/game/{roomId}/start). Host waits ~3s for everyone to join, then starts;
+    // the others begin answering a beat later so round 1 is active by the time they submit.
+    if (isHost) {
+        sleep(3);
+        http.post(`${BASE_URL}/api/game/${data.roomId}/start`, null, {
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${player.token}` },
+        });
+    } else {
+        sleep(4);
+    }
+
+    for (let round = 0; round < ROUNDS; round++) {
+        const t0 = Date.now();
+        const res = http.post(
+            `${BASE_URL}/api/game/${data.roomId}/answer`,
+            JSON.stringify({ answerText: 'load-test-answer' }),
+            {
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${player.token}` },
+            }
+        );
+        roundStartLatency.add(Date.now() - t0);
+
+        answerLatency.add(res.timings.duration);
+        const ok = check(res, { 'answer submit is 2xx or 4xx (not 5xx)': (r) => r.status < 500 });
+        if (!ok || res.status >= 400) {
+            answerRejections.add(1);
+        }
+
+        // Wait for the next round (30s per round). On the last iteration skip the sleep.
+        if (round < ROUNDS - 1) {
+            sleep(ROUND_DURATION_SECONDS);
+        }
     }
 }
 
@@ -162,9 +191,6 @@ function createConceptBank(token) {
 }
 
 function createRoom(token, bankId) {
-    // userId is no longer sent — RoomController.createRoom now takes the creator's userId from
-    // the authenticated principal (JWT), not the request body (audit gap #1's class of bug,
-    // found by extension in RoomController while validating GameController's fix).
     const res = http.post(
         `${BASE_URL}/api/rooms`,
         JSON.stringify({
@@ -178,20 +204,8 @@ function createRoom(token, bankId) {
     return JSON.parse(res.body).data;
 }
 
-function joinRoom(token, roomId) {
-    // No body needed — same principal-based userId fix as createRoom above.
-    http.post(`${BASE_URL}/api/rooms/${roomId}/join`, null, {
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    });
-}
-
 // The JWT subject is the userId (see JwtTokenProvider.generateToken) — decode without
 // verifying, this is a load-test client, not a security boundary.
-//
-// Bug found by actually running this script for the first time (audit gap #2 remediation,
-// 2026-07-15): manually swapping base64url's "-"/"_" for "+"/"/" and decoding as 'std' fails
-// because JWT segments have no "=" padding, which 'std' mode requires — k6's 'rawurl' encoding
-// handles base64url (unpadded) directly, no manual char-swapping needed.
 function decodeUserId(token) {
     const payload = token.split('.')[1];
     const decoded = JSON.parse(encoding.b64decode(payload, 'rawurl', 's'));

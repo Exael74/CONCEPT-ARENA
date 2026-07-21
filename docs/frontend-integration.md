@@ -128,19 +128,21 @@ duplicate that normalization client-side, just send what the user typed.
 
 | Method | Path | Auth | Body |
 |---|---|---|---|
-| POST | `/api/game/{roomId}/start` | JWT | — starts the round loop for a room. **Only the room's creator can call this successfully** — anyone else gets `403` with `message: "Only the room creator can start the game: ..."`. Hide/disable the Start button for non-creators (compare `creatorUserId` from `GET /api/rooms/{id}` against your own JWT `sub`) rather than showing this as a generic error. |
+| POST | `/api/game/{roomId}/start` | JWT | — starts the FIRST round of the game. **Only the room's creator can call this successfully** — anyone else gets `403` (`message: "Only the room creator can start the game: ..."`). Hide/disable the Start button for non-creators (compare `creatorUserId` from `GET /api/rooms/{id}` against your own JWT `sub`). A `409` (`"A round is already in progress ..."`) means the game is already running (e.g. a double-click) — safe to ignore. After the first round, rounds 2..N advance automatically; you only call this once. |
 | POST | `/api/game/{roomId}/answer` | JWT | `{ answerText }` — rate-limited to 3/sec/user, same limiter as the WS path below. A `400` with `message` starting "Round ended before this answer" means the round transitioned (ended/next round started) between when you loaded the question and when you submitted — re-fetch `current-round` (below) and let the user try again on whatever's now active, don't treat it as a hard failure. |
 | GET | `/api/game/{roomId}/current-round` | JWT | `data`: `{ roundId, question, difficulty, durationSeconds, remainingSeconds, alreadyAnswered }` for the calling user, or `404` if no round is active right now. **Call this on room/game screen load and on WS reconnect** — STOMP never replays past broadcasts, so a client that connects mid-round (e.g. the 2nd player joining after round 1 already started) will otherwise never learn the current question and gets stuck showing the lobby/an old round forever. `expectedAnswer` is deliberately never returned. |
 | GET | `/api/game/{roomId}/ranking` | public | `data`: `{ userId: score, ... }` |
 | GET | `/api/sessions/results?userId={id}` | public | a user's historical session results |
 | GET | `/api/sessions/results/room/{roomId}` | public | one room's results |
 
-**The auto-start-on-2-players behavior**: the game also auto-starts the moment a 2nd participant
-joins a room (not only via the explicit Start button) — so in a fast-moving room, round 1 can begin
-before a 3rd/4th intended player has finished connecting. There is currently no "wait for everyone"
-grace period; this is a known product-behavior gap, not a bug, and is being reconsidered separately.
-Regardless of how/when a round starts, the `current-round` polling pattern above is what keeps every
-client's UI correct even if they missed the exact moment it happened.
+**Start semantics (changed 2026-07-21):** the game does **not** auto-start anymore — it used to kick
+off the instant a 2nd player joined, which is why rounds began before everyone was in. Now the flow is:
+players enter the room (waiting room) and **subscribe to `/topic/rooms/{roomId}/round` immediately**;
+the owner clicks Start when everyone's ready; the single `ROUND_STARTED` broadcast then reaches all
+subscribed clients together, so everyone starts on the same question at the same moment. To be robust
+against a client that subscribed a beat late, also call `GET /api/game/{roomId}/current-round` on
+entering the game screen and on WS reconnect (STOMP never replays past broadcasts). Rounds after the
+first advance automatically — no further Start calls.
 
 ## 8. Voice signaling (voice-signaling-service, `/api/signaling/**`, `/ws/signaling`)
 

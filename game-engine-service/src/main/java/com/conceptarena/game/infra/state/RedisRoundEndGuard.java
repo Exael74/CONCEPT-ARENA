@@ -11,8 +11,13 @@ import org.springframework.stereotype.Component;
  * Redis instance, so exactly one of any number of concurrent callers (across any number of
  * game-engine-service replicas) ever wins tryClaim for a given roundId, closing the gap the
  * in-memory version had (each replica's local ConcurrentHashMap could independently "win" its
- * own claim). The TTL is a safety net so a claim isn't held forever if release() is never called
- * (e.g. the claiming replica crashes mid-processing).
+ * own claim).
+ *
+ * The claim is never explicitly deleted — a round, once ended, must stay claimed for the rest of
+ * its life so a late timer can't re-end it (see RoundEndGuard; the old release() was removed
+ * 2026-07-21 after it caused exactly that duplicate-end bug). The TTL is the sole memory bound:
+ * 10 minutes far exceeds any round's ~30s lifetime and any full 5-round game (~2.5 min), so a
+ * round is never re-claimable while its game is still running, and the key is reclaimed long after.
  */
 @Component
 @ConditionalOnProperty(name = "app.game-state.store", havingValue = "redis")
@@ -31,10 +36,5 @@ public class RedisRoundEndGuard implements RoundEndGuard {
     public boolean tryClaim(String roundId) {
         Boolean claimed = redisTemplate.opsForValue().setIfAbsent(KEY_PREFIX + roundId, "claimed", CLAIM_TTL);
         return Boolean.TRUE.equals(claimed);
-    }
-
-    @Override
-    public void release(String roundId) {
-        redisTemplate.delete(KEY_PREFIX + roundId);
     }
 }

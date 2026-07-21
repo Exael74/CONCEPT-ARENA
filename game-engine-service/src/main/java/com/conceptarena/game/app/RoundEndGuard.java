@@ -7,6 +7,14 @@ package com.conceptarena.game.app;
  * reach the "end this round and publish RoundEnded" step for the same roundId. Only the
  * caller that wins tryClaim actually ends the round; the loser must skip its own end logic.
  *
+ * A claim is intentionally NEVER released within a game: rounds are single-use and, once ended,
+ * must stay "already ended" forever so a stale timer that fires late can't re-end them. Releasing
+ * the claim after ending a round (which this had a release() method for, removed 2026-07-21) was a
+ * real production bug — the round's own 30s timer, already running when cancelled, re-claimed the
+ * just-freed round, re-ended it, and dispatched a duplicate next-round start, leaving two rounds
+ * simultaneously ACTIVE for one room (which blocked answering for the players split across them).
+ * Memory is bounded instead by a TTL on the claim, far longer than any round's ~30s lifetime.
+ *
  * Audit gap #7 remediation (2026-07-15): this was a concrete class backed by a local
  * ConcurrentHashMap, which only guarantees "only one winner" within a single JVM — with
  * game-engine-service running 2+ replicas, both the timer path in replica A and the early-end
@@ -17,9 +25,6 @@ package com.conceptarena.game.app;
  */
 public interface RoundEndGuard {
 
-    /** Returns true if this call is the first to claim ending this round. */
+    /** Returns true if this call is the first to claim ending this round. Never re-freed within the round's lifetime. */
     boolean tryClaim(String roundId);
-
-    /** Frees the roundId once it has been fully processed, to bound memory/keys over time. */
-    void release(String roundId);
 }
