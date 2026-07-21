@@ -1,4 +1,4 @@
-﻿package com.conceptarena.room.domain;
+package com.conceptarena.room.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
