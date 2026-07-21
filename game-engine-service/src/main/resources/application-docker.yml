@@ -63,8 +63,17 @@ app:
     store: redis
   stomp:
     relay:
-      # Audit gap #7: use RabbitMQ's STOMP plugin as a shared broker so round/timer /topic broadcasts
-      # fan out across all game-engine replicas (SimpleBroker by default, so tests need no broker).
-      enabled: true
+      # Audit gap #7 intended this to fan round/timer /topic broadcasts out across replicas via
+      # RabbitMQ's STOMP plugin. Found broken in production (2026-07-21): rabbitmq_stomp's
+      # `/topic/<name>` destination syntax does not accept a `<name>` containing further '/'
+      # segments — every destination here is "/topic/rooms/{roomId}/round" etc., so the relay
+      # rejected 100% of them ("not a valid topic destination"), silently dropping every
+      # real-time broadcast while leaving POST /api/game/{roomId}/start itself completely
+      # unaffected (that path never touches STOMP). Disabled back to SimpleBroker (in-process,
+      # no slash restriction) until destinations are migrated to a relay-safe format (e.g. dot-
+      # separated: "/topic/rooms.{roomId}.round") — a change that also needs the frontend's
+      # subscribe paths updated in lockstep. Only 1 replica of this service runs today, so
+      # SimpleBroker's single-instance-only reach is not currently a real limitation.
+      enabled: ${STOMP_RELAY_ENABLED:false}
       host: ${RABBITMQ_HOST:rabbitmq}
       port: ${STOMP_RELAY_PORT:61613}

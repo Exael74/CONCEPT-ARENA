@@ -53,8 +53,16 @@ app:
     store: redis
   stomp:
     relay:
-      # Audit gap #7: use RabbitMQ's STOMP plugin as a shared broker so /topic/lobby broadcasts fan
-      # out across all room-service replicas (SimpleBroker by default, so tests need no broker).
-      enabled: true
+      # Audit gap #7 intended this to fan /topic/lobby and /topic/rooms/{id}/participants broadcasts
+      # out across replicas via RabbitMQ's STOMP plugin. Found broken in production (2026-07-21):
+      # rabbitmq_stomp's `/topic/<name>` destination syntax rejects a `<name>` containing further
+      # '/' segments — "/topic/rooms/{roomId}/participants" is exactly that, so the relay rejected
+      # every one of those ("not a valid topic destination"), silently dropping the broadcast (the
+      # single-segment "/topic/lobby" was unaffected). Disabled back to SimpleBroker (in-process, no
+      # slash restriction) until destinations are migrated to a relay-safe format (e.g. dot-separated:
+      # "/topic/rooms.{roomId}.participants") in lockstep with the frontend's subscribe paths. Only
+      # 1 replica of this service runs today, so SimpleBroker's single-instance-only reach is not
+      # currently a real limitation.
+      enabled: ${STOMP_RELAY_ENABLED:false}
       host: ${RABBITMQ_HOST:rabbitmq}
       port: ${STOMP_RELAY_PORT:61613}
