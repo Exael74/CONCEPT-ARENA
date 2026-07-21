@@ -4,6 +4,7 @@ import com.conceptarena.kernel.valueobject.EntityId;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Round {
     private final EntityId id;
@@ -25,7 +26,7 @@ public class Round {
         this.difficulty = difficulty;
         this.duration = duration;
         this.status = status;
-        this.answers = new HashMap<>();
+        this.answers = new ConcurrentHashMap<>();
         this.startedAt = startedAt;
         this.endedAt = endedAt;
     }
@@ -58,10 +59,15 @@ public class Round {
         if (startedAt != null && Instant.now().isAfter(startedAt.plus(duration))) {
             throw new IllegalStateException("Time expired for this round");
         }
-        if (answers.containsKey(userId)) {
+        // ConcurrentHashMap.putIfAbsent makes the "one answer per user" check-and-set atomic, so
+        // two submissions racing on the same Round instance can't both slip through a
+        // check-then-put window (audit gap #1). The cross-transaction case — two requests each
+        // loading their own Round copy — is caught at the database by the answers(round_id, user_id)
+        // primary key (deterministic AnswerEntity id, see RoundMapper) and translated to a clean
+        // rejection in SubmitAnswerCommandHandler.
+        if (answers.putIfAbsent(userId, new Answer(userId, text)) != null) {
             throw new IllegalStateException("User already answered");
         }
-        answers.put(userId, new Answer(userId, text));
     }
 
     public void end() {

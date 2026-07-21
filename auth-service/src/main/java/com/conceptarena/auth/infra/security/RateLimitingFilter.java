@@ -5,33 +5,25 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Simple fixed-window rate limiter for the auth endpoints, keyed by client IP.
- * In-memory only: sufficient for a single-instance deployment; a multi-instance
- * deployment would need a shared store (e.g. Redis) instead.
+ * Rate-limits the auth endpoints (login/register) per client IP. The counting itself lives in
+ * {@link AuthRateLimiter} — in-memory by default, Redis-backed (shared across replicas) under the
+ * docker profile — so this filter only maps requests to a client key and turns a rejection into 429.
  */
 @Component
 public class RateLimitingFilter extends OncePerRequestFilter {
 
     private static final Set<String> LIMITED_PATHS = Set.of("/api/auth/login", "/api/auth/register");
-    private static final int MAX_REQUESTS_PER_WINDOW = 10;
-    private static final Duration WINDOW = Duration.ofMinutes(1);
 
-    private final Map<String, RequestWindow> windowsByClient = new ConcurrentHashMap<>();
+    private final AuthRateLimiter rateLimiter;
 
-    private static class RequestWindow {
-        final AtomicInteger count = new AtomicInteger(0);
-        volatile Instant windowStart = Instant.now();
+    public RateLimitingFilter(AuthRateLimiter rateLimiter) {
+        this.rateLimiter = rateLimiter;
     }
 
     @Override
@@ -42,17 +34,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             return;
         }
 
-        RequestWindow window = windowsByClient.computeIfAbsent(clientKey(request), k -> new RequestWindow());
-        boolean allowed;
-        synchronized (window) {
-            if (Duration.between(window.windowStart, Instant.now()).compareTo(WINDOW) > 0) {
-                window.windowStart = Instant.now();
-                window.count.set(0);
-            }
-            allowed = window.count.incrementAndGet() <= MAX_REQUESTS_PER_WINDOW;
-        }
-
-        if (!allowed) {
+        if (!rateLimiter.allow(clientKey(request))) {
             response.setStatus(429);
             response.setContentType("application/json");
             response.getWriter().write("{\"success\":false,\"message\":\"Too many requests, try again later\"}");

@@ -1,0 +1,388 @@
+# Audit gap #2 remediation (2026-07-15): this file did not exist before — the outbox/RabbitMQ
+# wiring, read-model consumers and idempotency logic in every service had never been run against
+# real infrastructure (see RoomReadModelEventConsumer's class comment). Hostnames/env var names
+# here match what each service's application-docker.yml already expected.
+#
+# Deployment hardening (same date, frontend integration phase):
+#  - `frontend` (nginx) is the single public entry point: serves the SPA and reverse-proxies
+#    /api + /ws to api-gateway, so browsers stay same-origin (no CORS) under a strict CSP.
+#  - restart policies on everything (a crashed JVM restarts instead of staying down).
+#  - TCP healthchecks on the Java services (the temurin JRE images ship no curl/wget;
+#    bash /dev/tcp probes the listening port without touching the image).
+#  - JAVA_TOOL_OPTIONS caps each JVM heap so the whole stack fits comfortably in ~4GB.
+
+x-java-env: &java-mem
+  JAVA_TOOL_OPTIONS: "-Xmx256m"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    ports:
+      # D1: bind internal infra to localhost only, so it isn't reachable from a public interface
+      # (on a public host, only the gateway :8080 and frontend :80 should be exposed).
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"   # management UI / API
+      - "15692:15692"   # Prometheus metrics endpoint (rabbitmq_prometheus) — scraped by Prometheus (audit gap #2)
+      - "61613:61613"   # STOMP (rabbitmq_stomp) — the STOMP broker relay backend for WS fan-out (audit gap #7)
+    volumes:
+      # Enables the rabbitmq_prometheus plugin so /metrics on 15692 exists for Prometheus to scrape.
+      - ./observability/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth-db:
+    image: postgres:16
+    # Audit #4: log every statement slower than 100ms so slow queries are visible in the DB logs
+    # (complements Hibernate's LOG_QUERIES_SLOWER_THAN_MS and the Loki log aggregation).
+    command: ["postgres", "-c", "log_min_duration_statement=100"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: auth
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data   # D2: named volume so data survives `compose down`
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth-redis:
+    # Audit gap #2: backs RedisAuthRateLimiter so the per-IP auth rate limit is shared across replicas.
+    image: redis:7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gateway-redis:
+    # A10: backs the api-gateway's global RequestRateLimiter (RedisRateLimiter token buckets).
+    image: redis:7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  room-outbox-db:
+    image: postgres:16
+    command: ["postgres", "-c", "log_min_duration_statement=100"]   # audit #4: slow-query logging
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: room_outbox
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - room-outbox-db-data:/var/lib/postgresql/data   # D2
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  room-redis:
+    image: redis:7
+    # D2/ADR-003: Room/Participant is AUTHORITATIVE domain state, so persist it (AOF) on a named
+    # volume — it must survive a restart, unlike a cache.
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    volumes:
+      - room-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  conceptbank-db:
+    image: postgres:16
+    command: ["postgres", "-c", "log_min_duration_statement=100"]   # audit #4: slow-query logging
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: conceptbank
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - conceptbank-db-data:/var/lib/postgresql/data   # D2
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  game-db:
+    image: postgres:16
+    command: ["postgres", "-c", "log_min_duration_statement=100"]   # audit #4: slow-query logging
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: game
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - game-db-data:/var/lib/postgresql/data   # D2
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  game-redis:
+    # Audit gap #7: backs RedisGameStateStore/RedisRoundEndGuard, externalizing GameSaga's
+    # session state so game-engine-service can run 2+ replicas.
+    image: redis:7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      auth-db: { condition: service_healthy }
+      auth-redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      AUTH_DB_HOST: auth-db
+      REDIS_HOST: auth-redis
+      RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+      # 2h instead of the 24h default: the token also rides WS-handshake URLs, keep it short-lived.
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-7200000}
+    ports:
+      - "127.0.0.1:8081:8081"   # D1: localhost-only; reach it through the gateway in prod
+    healthcheck:
+      # O13: functional check — GET /actuator/health, require HTTP 200 (DOWN returns 503), not just
+      # an open port. temurin JRE has no curl/wget, so do the HTTP GET over bash /dev/tcp.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8081; printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3; grep -q ' 200 ' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  room-service:
+    build:
+      context: .
+      dockerfile: room-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      room-outbox-db: { condition: service_healthy }
+      room-redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      ROOM_OUTBOX_DB_HOST: room-outbox-db
+      REDIS_HOST: room-redis
+      RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+    ports:
+      - "127.0.0.1:8082:8082"   # D1
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8082; printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3; grep -q ' 200 ' <&3"]   # O13
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  concept-bank-service:
+    build:
+      context: .
+      dockerfile: concept-bank-service/Dockerfile
+    restart: unless-stopped
+    # S1: horizontal scaling is expressed in k8s/ (app-deployments.yaml: replicas + HPA), NOT here —
+    # this Compose version honors `deploy.replicas` for `up`, and a service that publishes a fixed
+    # host port can't run >1 replica (port clash). Compose stays single-instance per service; the
+    # Kubernetes manifests are where N replicas actually run.
+    depends_on:
+      conceptbank-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      CONCEPTBANK_DB_HOST: conceptbank-db
+      RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+    ports:
+      - "127.0.0.1:8084:8084"   # D1
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8084; printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3; grep -q ' 200 ' <&3"]   # O13
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  game-engine-service:
+    build:
+      context: .
+      dockerfile: game-engine-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      game-db: { condition: service_healthy }
+      game-redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      GAME_DB_HOST: game-db
+      GAME_REDIS_HOST: game-redis
+      RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+    ports:
+      - "127.0.0.1:8083:8083"   # D1
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8083; printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3; grep -q ' 200 ' <&3"]   # O13
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  voice-signaling-service:
+    # Audit gap #3 remediation: previously missing from the repo entirely.
+    build:
+      context: .
+      dockerfile: voice-signaling-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+    ports:
+      - "127.0.0.1:8085:8085"   # D1
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8085; printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3; grep -q ' 200 ' <&3"]   # O13
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  api-gateway:
+    # Audit gap #3 remediation: single entry point for the 4 REST-exposing services — previously
+    # missing from the repo entirely, forcing clients to know each service's own host/port.
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      auth-service: { condition: service_healthy }
+      room-service: { condition: service_healthy }
+      concept-bank-service: { condition: service_healthy }
+      game-engine-service: { condition: service_healthy }
+      voice-signaling-service: { condition: service_healthy }
+      gateway-redis: { condition: service_healthy }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      REDIS_HOST: gateway-redis
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080; printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3; grep -q ' 200 ' <&3"]   # O13
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  frontend:
+    # Single public entry point: static SPA + reverse proxy to api-gateway (same-origin, CSP).
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      # D10: wait for the gateway to START, not to be fully HEALTHY. nginx can come up and return a
+      # brief 502 until the gateway is ready — that's fine, and it avoids blocking the whole frontend
+      # on the gateway's health (which itself waits on all backend services).
+      api-gateway: { condition: service_started }
+    ports:
+      - "80:80"
+
+  # ------------------------------------------------------------------------------------------------
+  # Observability stack (audit gap #2 remediation): before this, the 6 services already exposed
+  # /actuator/prometheus and RabbitMQ its metrics, but NOTHING collected them — the instrumentation
+  # was invisible and there were no alerts (observability was "passive"). Prometheus now scrapes all
+  # of it and evaluates alert rules; Grafana visualizes it via an auto-provisioned dashboard +
+  # datasources; Loki + Promtail aggregate the JSON container logs. See observability/.
+  # ------------------------------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    restart: unless-stopped
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus   # O14: persist the TSDB across restarts (named volume)
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d   # O14: explicit 15-day metrics retention
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana   # O14/D2: persist Grafana state
+    ports:
+      - "3000:3000"
+
+  loki:
+    image: grafana/loki:2.9.6
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki   # O14/D2: persist Loki chunks/index across restarts
+
+  promtail:
+    image: grafana/promtail:2.9.6
+    restart: unless-stopped
+    depends_on:
+      - loki
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  zipkin:
+    # Distributed tracing backend (audit gap #7): receives spans from every service's
+    # micrometer-tracing-bridge-brave reporter, so one request/event can be followed across
+    # gateway -> services -> RabbitMQ consumers by traceId. In-memory storage (fine for dev/demo).
+    image: openzipkin/zipkin:3
+    restart: unless-stopped
+    ports:
+      - "9411:9411"
+
+# D2/O14: named volumes so `docker compose down` (without -v) preserves data — DB rows, the
+# authoritative room Redis, and the metrics/logs history.
+volumes:
+  auth-db-data:
+  room-outbox-db-data:
+  conceptbank-db-data:
+  game-db-data:
+  room-redis-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:

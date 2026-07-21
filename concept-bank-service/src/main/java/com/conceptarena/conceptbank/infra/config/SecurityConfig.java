@@ -1,5 +1,6 @@
 package com.conceptarena.conceptbank.infra.config;
 
+import com.conceptarena.conceptbank.infra.security.CorrelationIdFilter;
 import com.conceptarena.jwtlib.JwtBearerAuthenticationFilter;
 import com.conceptarena.jwtlib.JwtValidator;
 import org.springframework.beans.factory.annotation.Value;

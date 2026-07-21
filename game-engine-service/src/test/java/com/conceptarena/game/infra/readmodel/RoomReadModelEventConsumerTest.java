@@ -2,6 +2,7 @@ package com.conceptarena.game.infra.readmodel;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.conceptarena.game.app.bus.EventBus;
@@ -35,13 +36,15 @@ class RoomReadModelEventConsumerTest {
     private JpaRoomReadModelRepository roomRepository;
     @org.springframework.beans.factory.annotation.Autowired
     private JpaParticipantReadModelRepository participantRepository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private JpaProcessedEventRepository processedEventRepository;
 
     @Mock private EventBus localEventBus;
     private RoomReadModelEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new RoomReadModelEventConsumer(roomRepository, participantRepository, localEventBus, new ObjectMapper());
+        consumer = new RoomReadModelEventConsumer(roomRepository, participantRepository, processedEventRepository, localEventBus, new ObjectMapper());
     }
 
     @Test
@@ -81,5 +84,30 @@ class RoomReadModelEventConsumerTest {
 
         assertThat(participantRepository.existsByRoomIdAndUserId("room-4", "user-1")).isFalse();
         verify(localEventBus).publish(any(RoomLeft.class));
+    }
+
+    @Test
+    void handleRoomCreatedIsIdempotentUnderRedelivery() {
+        // RoomCreated has no eventId in its payload; it dedups on its natural key (room_id upsert).
+        RoomCreatedMessage msg = new RoomCreatedMessage("room-5", "Study Room", "PUBLIC", "user-1", "bank-1", 4);
+
+        consumer.handleRoomCreated(msg);
+        consumer.handleRoomCreated(msg); // redelivery — must not duplicate the row or throw
+
+        assertThat(roomRepository.findById("room-5").orElseThrow().getConceptBankId()).isEqualTo("bank-1");
+        assertThat(roomRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void handleRoomLeftIsIdempotentUnderRedeliveryAndRepublishesOnlyOnce() {
+        consumer.handleRoomJoined(new RoomJoinedMessage("evt-join", "2026-01-01T00:00:00Z", "room-6", "user-1"));
+        RoomLeftMessage left = new RoomLeftMessage("evt-left", "2026-01-01T00:01:00Z", "room-6", "user-1");
+
+        consumer.handleRoomLeft(left);
+        consumer.handleRoomLeft(left); // redelivery — the eventId ledger must suppress the second effect
+
+        assertThat(participantRepository.existsByRoomIdAndUserId("room-6", "user-1")).isFalse();
+        // The local re-publish (which re-triggers GameSaga) must fire exactly once despite two deliveries.
+        verify(localEventBus, times(1)).publish(any(RoomLeft.class));
     }
 }

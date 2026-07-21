@@ -4,12 +4,14 @@ import com.conceptarena.auth.app.bus.EventBus;
 import com.conceptarena.auth.app.bus.EventHandler;
 import com.conceptarena.auth.domain.event.UserLoggedIn;
 import com.conceptarena.auth.domain.event.UserRegistered;
+import com.conceptarena.auth.infra.security.CorrelationIdFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 /**
@@ -52,7 +54,8 @@ public class OutboxWritingEventHandler {
         try {
             String json = objectMapper.writeValueAsString(payload);
             OutboxEvent row = new OutboxEvent(
-                UUID.randomUUID().toString(), aggregateId, eventType, EXCHANGE, routingKey, json, Instant.now());
+                UUID.randomUUID().toString(), aggregateId, eventType, EXCHANGE, routingKey, json, Instant.now(),
+                MDC.get(CorrelationIdFilter.MDC_KEY));
             outboxEventRepository.save(row);
         } catch (Exception e) {
             log.error("Failed to write outbox row for {} (aggregateId={}): {}", eventType, aggregateId, e.getMessage(), e);

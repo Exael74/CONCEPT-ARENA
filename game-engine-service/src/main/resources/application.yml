@@ -21,6 +21,12 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.H2Dialect
+        # Slow-query visibility (audit #4): log any query slower than 100ms. The docker profile
+        # keeps the same threshold on Postgres, complemented by log_min_duration_statement on the DB.
+        session:
+          events:
+            log:
+              LOG_QUERIES_SLOWER_THAN_MS: 100
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -30,11 +36,22 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    # A7: broker acks each published message (correlated) and returns unroutable ones.
+    publisher-confirm-type: correlated
+    publisher-returns: true
     listener:
       simple:
         # Don't fail to start if the declared queues don't exist yet on the broker (or the
         # broker itself isn't reachable) — see RoomReadModelEventConsumer's class comment.
         missing-queues-fatal: false
+        # A6: after the retries below are exhausted, reject WITHOUT requeue so the message is
+        # dead-lettered to conceptarena.game.dlx instead of looping forever (poison-message safety).
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000ms
+          multiplier: 2
 
 logging:
   level:
@@ -52,6 +69,13 @@ management:
     export:
       prometheus:
         enabled: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        conceptarena.events: true
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+        conceptarena.events: 0.5, 0.95, 0.99
 
 app:
   jwt:

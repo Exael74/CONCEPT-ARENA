@@ -12,6 +12,7 @@ import com.conceptarena.game.app.bus.CommandBus;
 import com.conceptarena.game.infra.ws.AnswerRateLimiter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.security.Principal;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,14 +33,19 @@ class GameControllerTest {
     @MockBean private AnswerRateLimiter rateLimiter;
     @MockBean private MeterRegistry meterRegistry;
 
+    private static Principal principal(String userId) {
+        return () -> userId;
+    }
+
     @Test
     void submitAnswerReturnsOk() throws Exception {
         when(rateLimiter.allow("user-1")).thenReturn(true);
 
         mockMvc.perform(post("/api/game/{roomId}/answer", "room-1")
+                .principal(principal("user-1"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
-                    new GameController.SubmitAnswerRequest("user-1", "polymorphism"))))
+                    new GameController.SubmitAnswerRequest("polymorphism"))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true));
     }
@@ -50,9 +56,10 @@ class GameControllerTest {
         when(commandBus.dispatch(any())).thenThrow(new IllegalStateException("No active round for room: room-1"));
 
         mockMvc.perform(post("/api/game/{roomId}/answer", "room-1")
+                .principal(principal("user-1"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
-                    new GameController.SubmitAnswerRequest("user-1", "polymorphism"))))
+                    new GameController.SubmitAnswerRequest("polymorphism"))))
             .andExpect(status().isBadRequest());
     }
 
@@ -66,11 +73,34 @@ class GameControllerTest {
         when(rateLimiter.allow("spammer")).thenReturn(false);
 
         mockMvc.perform(post("/api/game/{roomId}/answer", "room-1")
+                .principal(principal("spammer"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
-                    new GameController.SubmitAnswerRequest("spammer", "polymorphism"))))
+                    new GameController.SubmitAnswerRequest("polymorphism"))))
             .andExpect(status().isTooManyRequests())
             .andExpect(jsonPath("$.success").value(false));
+    }
+
+    /**
+     * Closes audit gap #1: the userId used for scoring/anti-cheat must come from the
+     * authenticated principal, never from the request body, or a caller authenticated as one
+     * user could submit answers on behalf of another.
+     */
+    @Test
+    void submitAnswerUsesAuthenticatedPrincipalNotRequestBody() throws Exception {
+        when(rateLimiter.allow("real-user")).thenReturn(true);
+
+        mockMvc.perform(post("/api/game/{roomId}/answer", "room-1")
+                .principal(principal("real-user"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(
+                    new GameController.SubmitAnswerRequest("polymorphism"))))
+            .andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<com.conceptarena.game.domain.command.SubmitAnswerCommand> captor =
+            org.mockito.ArgumentCaptor.forClass(com.conceptarena.game.domain.command.SubmitAnswerCommand.class);
+        org.mockito.Mockito.verify(commandBus).dispatch(captor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals("real-user", captor.getValue().userId());
     }
 
     @Test

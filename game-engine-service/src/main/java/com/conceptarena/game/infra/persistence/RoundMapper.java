@@ -14,6 +14,8 @@ public class RoundMapper {
 
     public static AnswerEntity toEntity(Answer domain, String roundId) {
         AnswerEntity entity = new AnswerEntity();
+        // Deterministic surrogate key: exactly one row per (round, user). See AnswerEntity#id.
+        entity.setId(roundId + "::" + domain.getUserId());
         entity.setRoundId(roundId);
         entity.setUserId(domain.getUserId());
         entity.setText(domain.getText());

@@ -1,0 +1,42 @@
+# Prometheus scrape + rule config (audit gap #2 remediation). Before this file the 6 services
+# already exposed /actuator/prometheus and RabbitMQ exposed its metrics, but nothing scraped them —
+# the instrumentation was invisible. Prometheus (see docker-compose.yml) now pulls all of it and
+# evaluates the alert rules in alerts.yml.
+global:
+  # O12: 5s scrape (was 15s) so short latency spikes and brief error bursts aren't averaged away
+  # between samples. Fine at this scale (6 services + RabbitMQ).
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Spring Boot Actuator + Micrometer Prometheus registry on every Java service. The `app` label
+  # (deliberately NOT `service`, to avoid colliding with errors_total's own `service` tag) identifies
+  # which service a series came from.
+  - job_name: conceptarena-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['auth-service:8081']
+        labels: { app: auth-service }
+      - targets: ['room-service:8082']
+        labels: { app: room-service }
+      - targets: ['game-engine-service:8083']
+        labels: { app: game-engine-service }
+      - targets: ['concept-bank-service:8084']
+        labels: { app: concept-bank-service }
+      - targets: ['voice-signaling-service:8085']
+        labels: { app: voice-signaling-service }
+      - targets: ['api-gateway:8080']
+        labels: { app: api-gateway }
+
+  # RabbitMQ's built-in rabbitmq_prometheus plugin (enabled via observability/rabbitmq/enabled_plugins)
+  # exposes queue depth / consumer metrics on 15692 — this is what powers the queue-lag alert.
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ['rabbitmq:15692']

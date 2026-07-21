@@ -14,7 +14,7 @@ class RoundEndGuardTest {
 
     @Test
     void firstClaimSucceedsSecondClaimForSameRoundFails() {
-        RoundEndGuard guard = new RoundEndGuard();
+        RoundEndGuard guard = new com.conceptarena.game.infra.state.InMemoryRoundEndGuard();
 
         assertThat(guard.tryClaim("round-1")).isTrue();
         assertThat(guard.tryClaim("round-1")).isFalse();
@@ -22,7 +22,7 @@ class RoundEndGuardTest {
 
     @Test
     void differentRoundsClaimIndependently() {
-        RoundEndGuard guard = new RoundEndGuard();
+        RoundEndGuard guard = new com.conceptarena.game.infra.state.InMemoryRoundEndGuard();
 
         assertThat(guard.tryClaim("round-1")).isTrue();
         assertThat(guard.tryClaim("round-2")).isTrue();
@@ -30,7 +30,7 @@ class RoundEndGuardTest {
 
     @Test
     void releaseAllowsTheRoundToBeClaimedAgain() {
-        RoundEndGuard guard = new RoundEndGuard();
+        RoundEndGuard guard = new com.conceptarena.game.infra.state.InMemoryRoundEndGuard();
         guard.tryClaim("round-1");
 
         guard.release("round-1");
@@ -40,7 +40,7 @@ class RoundEndGuardTest {
 
     @Test
     void onlyOneWinnerWhenManyThreadsRaceForTheSameRound() throws Exception {
-        RoundEndGuard guard = new RoundEndGuard();
+        RoundEndGuard guard = new com.conceptarena.game.infra.state.InMemoryRoundEndGuard();
         int attempts = 50;
         ExecutorService pool = Executors.newFixedThreadPool(attempts);
         AtomicInteger winners = new AtomicInteger();

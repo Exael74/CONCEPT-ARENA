@@ -1,0 +1,72 @@
+spring:
+  data:
+    redis:
+      # A10: backs the gateway's RequestRateLimiter (RedisRateLimiter token buckets).
+      host: ${REDIS_HOST:gateway-redis}
+      port: ${REDIS_PORT:6379}
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/api/auth/**
+        - id: room-service-rest
+          uri: http://room-service:8082
+          predicates:
+            - Path=/api/rooms/**
+        - id: concept-bank-service
+          uri: http://concept-bank-service:8084
+          predicates:
+            - Path=/api/concept-banks/**
+        - id: game-engine-service-rest
+          uri: http://game-engine-service:8083
+          predicates:
+            - Path=/api/game/**,/api/sessions/**
+        - id: room-service-ws
+          uri: ws://room-service:8082
+          predicates:
+            - Path=/ws/lobby/**
+        - id: room-service-stomp
+          uri: ws://room-service:8082
+          predicates:
+            - Path=/ws/room-stomp/**
+        - id: game-engine-service-ws
+          uri: ws://game-engine-service:8083
+          predicates:
+            - Path=/ws/game/**
+        - id: game-engine-service-stomp
+          uri: ws://game-engine-service:8083
+          predicates:
+            - Path=/ws/game-stomp/**
+        - id: voice-signaling-service-ws
+          uri: ws://voice-signaling-service:8085
+          predicates:
+            - Path=/ws/signaling/**
+      # Redefines the base default-filters (A9 headers) AND adds A10's global rate limiter — a
+      # profile-specific list replaces (not merges with) the base list, so the A9 headers are
+      # repeated here. Generous limits (100 rps/IP, burst 200): a real safety net, not a throttle.
+      default-filters:
+        - AddResponseHeader=X-Content-Type-Options, nosniff
+        - AddResponseHeader=X-Frame-Options, DENY
+        - AddResponseHeader=Referrer-Policy, no-referrer
+        - AddResponseHeader=Permissions-Policy, geolocation=(), camera=(), microphone=(self)
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 100
+            redis-rate-limiter.burstCapacity: 200
+            key-resolver: "#{@ipKeyResolver}"
+
+logging:
+  level:
+    com.conceptarena: INFO
+
+# Distributed tracing (audit gap #7): the gateway is where a request enters, so its span is the root
+# of the trace that then propagates to every backend service. Reported to Zipkin (docker profile only).
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans

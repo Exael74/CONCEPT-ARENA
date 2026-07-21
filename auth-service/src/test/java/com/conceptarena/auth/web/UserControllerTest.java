@@ -31,6 +31,9 @@ class UserControllerTest {
     @Autowired private ObjectMapper objectMapper;
     @MockBean private CommandBus commandBus;
     @MockBean private MeterRegistry meterRegistry;
+    // RateLimitingFilter (a Filter bean in the @WebMvcTest slice) now depends on AuthRateLimiter
+    // (audit gap #2); provide it so the context loads. addFilters=false means the filter never runs here.
+    @MockBean private com.conceptarena.auth.infra.security.AuthRateLimiter rateLimiter;
 
     @Test
     void registerReturnsCreatedWithUserId() throws Exception {

@@ -13,6 +13,14 @@
     <artifactId>game-engine-service</artifactId>
     <packaging>jar</packaging>
 
+    <properties>
+        <!-- Default: run everything except integration-tagged (Testcontainers) tests. The
+             `integration` profile below flips these to run ONLY the integration tests. Driven by
+             properties because surefire plugin-config merge between build and profile is unreliable. -->
+        <surefire.included.groups></surefire.included.groups>
+        <surefire.excluded.groups>integration</surefire.excluded.groups>
+    </properties>
+
     <name>game-engine-service</name>
     <description>
         Rounds/answers/scoring/game-saga microservice — own Postgres (rounds/answers/session_results
@@ -39,6 +47,14 @@
             <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
         <dependency>
+            <!-- Required by enableStompBrokerRelay (audit gap #7): StompBrokerRelayMessageHandler's
+                 ReactorNettyTcpClient needs the FULL reactor-netty (core + http) — reactor-netty-core
+                 alone makes it throw "No compatible version of Reactor Netty" at startup. Only
+                 exercised under the docker profile (app.stomp.relay.enabled=true). -->
+            <groupId>io.projectreactor.netty</groupId>
+            <artifactId>reactor-netty</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
@@ -55,12 +71,44 @@
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
         <dependency>
+            <!-- Audit gap #7: externalizes GameSaga's session state so this service can run
+                 2+ replicas — see RedisGameStateStore/RedisRoundEndGuard, active when
+                 app.game-state.store=redis (docker/production profile only). -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
         <dependency>
+            <!-- O1: structured JSON logs (valid JSON with proper escaping, all MDC keys included). -->
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+        </dependency>
+        <dependency>
+            <!-- Audit gap #7: distributed tracing (Micrometer -> Brave -> Zipkin), so a request or
+                 event can be followed across all services by traceId. Enabled only under the docker
+                 profile (application-docker.yml); default/test runs sample nothing. -->
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <!-- S4: in-process cache (Caffeine) for the read-heavy session-results/ranking queries. -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
         </dependency>
 
         <dependency>
@@ -88,6 +136,19 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <!-- Audit gap #5: broker-level idempotency test (RoomReadModelEventConsumerIdempotencyIT)
+                 publishes the same event twice through a real RabbitMQ. Tagged "integration", so it's
+                 excluded from the normal build (needs Docker) — run with `-Pintegration`. -->
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>rabbitmq</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -106,6 +167,27 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <!-- Integration tests (Testcontainers, need Docker) are tagged "integration" and
+                     excluded from the normal build; run them with `-Pintegration` (audit gap #5). -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <groups>${surefire.included.groups}</groups>
+                    <excludedGroups>${surefire.excluded.groups}</excludedGroups>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <!-- Run ONLY the Testcontainers integration tests (needs Docker): mvn -Pintegration test -->
+            <id>integration</id>
+            <properties>
+                <surefire.included.groups>integration</surefire.included.groups>
+                <surefire.excluded.groups></surefire.excluded.groups>
+            </properties>
+        </profile>
+    </profiles>
 </project>

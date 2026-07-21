@@ -34,7 +34,12 @@ public class OutboxEventPublisher {
         List<OutboxEvent> pending = outboxEventRepository.findTop100ByPublishedAtIsNullOrderByCreatedAtAsc();
         for (OutboxEvent row : pending) {
             try {
-                rabbitTemplate.convertAndSend(row.getExchange(), row.getRoutingKey(), row.getPayload());
+                rabbitTemplate.convertAndSend(row.getExchange(), row.getRoutingKey(), row.getPayload(), message -> {
+                    if (row.getCorrelationId() != null) {
+                        message.getMessageProperties().setHeader("correlationId", row.getCorrelationId());
+                    }
+                    return message;
+                });
                 row.markPublished(Instant.now());
             } catch (Exception e) {
                 row.recordFailure(e.getMessage());

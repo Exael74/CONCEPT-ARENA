@@ -1,0 +1,1106 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: -
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 30 max VUs, 2m30s max duration (incl. graceful stop):
+              * thirty_players: 1 iterations for each of 30 VUs (maxDuration: 2m0s, gracefulStop: 30s)
+
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+Run              [ 100% ] setup()
+thirty_players   [   0% ]
+
+running (5m47.0s), 30/30 VUs, 0 complete and 0 interrupted iterations
+thirty_players   [   0% ] 30 VUs  0m00.6s/2m0s  00/30 iters, 1 per VU
+
+running (5m48.0s), 30/30 VUs, 0 complete and 0 interrupted iterations
+thirty_players   [   0% ] 30 VUs  0m01.6s/2m0s  00/30 iters, 1 per VU
+
+
+  █ THRESHOLDS 
+
+    http_req_duration
+    ✗ 'p(95)<500' p(95)=733.68ms
+    ✓ 'p(99)<1000' p(99)=763.59ms
+
+    http_req_failed
+    ✗ 'rate<0.01' rate=28.36%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 30     0.086156/s
+    checks_succeeded...: 46.66% 14 out of 30
+    checks_failed......: 53.33% 16 out of 30
+
+    ✗ answer submit is 2xx or 4xx (not 5xx)
+      ↳  46% — ✓ 14 / ✗ 16
+
+    CUSTOM
+    answer_rejections..............: 18     0.051694/s
+    answer_submit_duration_ms......: avg=705.10369 min=651.06571 med=714.180909 max=766.700165 p(90)=751.222795 p(95)=763.560514
+
+    HTTP
+    http_req_duration..............: avg=205.74ms  min=5.63ms    med=95.49ms    max=766.7ms    p(90)=714.18ms   p(95)=733.68ms  
+      { expected_response:true }...: avg=155.16ms  min=22.84ms   med=95.79ms    max=749.89ms   p(90)=651.43ms   p(95)=663.14ms  
+    http_req_failed................: 28.36% 40 out of 141
+    http_reqs......................: 141    0.404933/s
+
+    EXECUTION
+    iteration_duration.............: avg=1.73s     min=1.68s     med=1.74s      max=1.8s       p(90)=1.78s      p(95)=1.79s     
+    iterations.....................: 30     0.086156/s
+    vus............................: 30     min=0         max=30
+    vus_max........................: 30     min=30        max=30
+
+    NETWORK
+    data_received..................: 89 kB  257 B/s
+    data_sent......................: 49 kB  140 B/s
+
+
+
+
+running (5m48.2s), 00/30 VUs, 30 complete and 0 interrupted iterations
+thirty_players ✓ [ 100% ] 30 VUs  0m01.8s/2m0s  30/30 iters, 1 per VU
+time="2026-07-15T14:11:37Z" level=error msg="thresholds on metrics 'http_req_duration, http_req_failed' have been crossed"

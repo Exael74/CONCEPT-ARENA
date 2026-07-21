@@ -12,7 +12,7 @@ spring:
         session:
           events:
             log:
-              LOG_QUERIES_SLOWER_THAN_MS: 200
+              LOG_QUERIES_SLOWER_THAN_MS: 100
   flyway:
     locations: classpath:db/migration
   rabbitmq:
@@ -20,6 +20,23 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    # Propagate the trace context over the message bus so a trace continues across the
+    # outbox -> consumer hop, not only across HTTP (audit gap #7).
+    template:
+      observation-enabled: true
+    listener:
+      simple:
+        observation-enabled: true
+
+# Distributed tracing (audit gap #7): report spans to Zipkin. Sampling 1.0 traces everything, which
+# is fine at this scale; set only under the docker profile so tests/local runs emit no spans.
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans
 
 logging:
   level:

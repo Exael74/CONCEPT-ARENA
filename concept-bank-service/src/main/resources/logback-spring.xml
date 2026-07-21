@@ -18,8 +18,10 @@
     <springProfile name="docker">
         <!-- JSON appender, scraped by Promtail from container stdout -->
         <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-            <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-                <pattern>{"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}","level":"%level","service":"concept-bank-service","logger":"%logger{30}","thread":"%thread","requestId":"%X{requestId}","eventId":"%X{eventId}","eventType":"%X{eventType}","message":"%msg"}%n</pattern>
+            <!-- O1/O6: valid JSON via LogstashEncoder (proper escaping); ALL MDC keys included
+                 automatically, so userId (previously missing from this service's pattern) now appears. -->
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <customFields>{"service":"concept-bank-service"}</customFields>
             </encoder>
         </appender>
 

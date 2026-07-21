@@ -1,10 +1,13 @@
 package com.conceptarena.game.infra.readmodel;
 
 import com.conceptarena.game.infra.readmodel.dto.ConceptBankCreatedMessage;
+import com.conceptarena.game.infra.security.CorrelationIdFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,8 +33,16 @@ public class ConceptBankReadModelEventConsumer {
     }
 
     @RabbitListener(queues = "game-engine.conceptbank.created.readmodel")
-    public void onConceptBankCreatedMessage(String rawPayload) throws Exception {
-        handleConceptBankCreated(objectMapper.readValue(rawPayload, ConceptBankCreatedMessage.class));
+    public void onConceptBankCreatedMessage(String rawPayload,
+                                             @Header(value = "correlationId", required = false) String correlationId) throws Exception {
+        if (correlationId != null) {
+            MDC.put(CorrelationIdFilter.MDC_KEY, correlationId);
+        }
+        try {
+            handleConceptBankCreated(objectMapper.readValue(rawPayload, ConceptBankCreatedMessage.class));
+        } finally {
+            MDC.remove(CorrelationIdFilter.MDC_KEY);
+        }
     }
 
     @Transactional

@@ -1,0 +1,27 @@
+# S10/S1: HorizontalPodAutoscalers — the real auto-scaling that compose can't do. They scale on CPU
+# (and would extend to custom Prometheus metrics via the adapter). Requires metrics-server installed.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: game-engine-service, namespace: conceptarena }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: game-engine-service }
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 75 }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: concept-bank-service, namespace: conceptarena }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: concept-bank-service }
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 75 }

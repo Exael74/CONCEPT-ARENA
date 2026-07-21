@@ -13,6 +13,7 @@ target/
 *.log
 .env
 node_modules/
-mock/dist/
+frontend/
+
 .DS_Store
 Thumbs.db

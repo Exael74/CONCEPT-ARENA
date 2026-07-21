@@ -1,4 +1,8 @@
 spring:
+  data:
+    redis:
+      host: ${GAME_REDIS_HOST:game-redis}
+      port: ${GAME_REDIS_PORT:6379}
   datasource:
     url: jdbc:postgresql://${GAME_DB_HOST:game-db}:${GAME_DB_PORT:5432}/${GAME_DB_NAME:game}
     driver-class-name: org.postgresql.Driver
@@ -11,7 +15,7 @@ spring:
         session:
           events:
             log:
-              LOG_QUERIES_SLOWER_THAN_MS: 200
+              LOG_QUERIES_SLOWER_THAN_MS: 100
   flyway:
     locations: classpath:db/migration
   rabbitmq:
@@ -19,9 +23,23 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    # Propagate the trace context over the message bus so a trace continues across the
+    # outbox -> consumer hop, not only across HTTP (audit gap #7).
+    template:
+      observation-enabled: true
     listener:
       simple:
         missing-queues-fatal: false
+        observation-enabled: true
+
+# Distributed tracing (audit gap #7): report spans to Zipkin (only under the docker profile).
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans
 
 logging:
   level:
@@ -30,3 +48,19 @@ logging:
 app:
   jwt:
     secret: ${JWT_SECRET}   # required — no default, fails fast if unset
+  game-state:
+    # Audit gap #7: externalizes GameSaga's session state to Redis so this service can run 2+
+    # replicas — see RedisGameStateStore/RedisRoundEndGuard. Only set here (not in the default
+    # application.yml) so every existing unit test keeps using the in-memory implementations.
+    store: redis
+  rate-limiter:
+    # Audit gap #2: shared Redis sliding-window limiter so the 3/s answer cap holds across replicas
+    # (in-memory by default, so unit tests need no Redis). See RedisAnswerRateLimiter.
+    store: redis
+  stomp:
+    relay:
+      # Audit gap #7: use RabbitMQ's STOMP plugin as a shared broker so round/timer /topic broadcasts
+      # fan out across all game-engine replicas (SimpleBroker by default, so tests need no broker).
+      enabled: true
+      host: ${RABBITMQ_HOST:rabbitmq}
+      port: ${STOMP_RELAY_PORT:61613}

@@ -14,6 +14,7 @@ import com.conceptarena.room.domain.Room;
 import com.conceptarena.room.domain.RoomType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.security.Principal;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,15 @@ class RoomControllerTest {
     @MockBean private CommandBus commandBus;
     @MockBean private RoomQueryService roomQueryService;
     @MockBean private RoomRepository roomRepository;
+    @MockBean private RoomActionRateLimiter rateLimiter;
     @MockBean private MeterRegistry meterRegistry;
+
+    @org.junit.jupiter.api.BeforeEach
+    void allowRateLimitByDefault() {
+        // Write endpoints now gate on the rate limiter (audit gap #5); default it to "allow" so the
+        // existing happy-path tests exercise the endpoint logic, not the limiter.
+        when(rateLimiter.allow(any())).thenReturn(true);
+    }
 
     @Test
     void listActiveRoomsReturnsOk() throws Exception {
@@ -66,16 +75,24 @@ class RoomControllerTest {
             .andExpect(status().isNotFound());
     }
 
+    private static Principal principal(String userId) {
+        return () -> userId;
+    }
+
     @Test
-    void createRoomReturnsCreated() throws Exception {
-        when(commandBus.dispatch(any())).thenReturn("room-123");
+    void createRoomReturnsCreatedWithRoomIdAndInviteCode() throws Exception {
+        Room room = Room.create("Study Room", RoomType.PRIVATE, "ABC123", "bank-1", 4);
+        when(commandBus.dispatch(any())).thenReturn(room.getId().value());
+        when(roomRepository.findById(room.getId().value())).thenReturn(Optional.of(room));
 
         mockMvc.perform(post("/api/rooms")
+                .principal(principal("user-1"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
-                    new RoomController.CreateRoomRequest("Study Room", RoomType.PUBLIC, "bank-1", 4, "user-1"))))
+                    new RoomController.CreateRoomRequest("Study Room", RoomType.PRIVATE, "bank-1", 4))))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.data").value("room-123"));
+            .andExpect(jsonPath("$.data.roomId").value(room.getId().value()))
+            .andExpect(jsonPath("$.data.inviteCode").value("ABC123"));
     }
 
     @Test
@@ -83,17 +100,43 @@ class RoomControllerTest {
         when(commandBus.dispatch(any())).thenThrow(new IllegalArgumentException("Room name must not be empty"));
 
         mockMvc.perform(post("/api/rooms")
+                .principal(principal("user-1"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
-                    new RoomController.CreateRoomRequest(" ", RoomType.PUBLIC, "bank-1", 4, "user-1"))))
+                    new RoomController.CreateRoomRequest(" ", RoomType.PUBLIC, "bank-1", 4))))
             .andExpect(status().isBadRequest());
     }
 
     @Test
     void joinRoomReturnsOk() throws Exception {
         mockMvc.perform(post("/api/rooms/{id}/join", "room-1")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(new RoomController.JoinRoomRequest("user-1"))))
+                .principal(principal("user-1")))
             .andExpect(status().isOk());
+    }
+
+    /**
+     * Audit gap #5: room write endpoints must enforce a per-user rate limit (room-service had
+     * none). Must return 429 and never reach the command bus when the limiter rejects.
+     */
+    @Test
+    void joinRoomReturnsTooManyRequestsWhenRateLimitExceeded() throws Exception {
+        when(rateLimiter.allow("spammer")).thenReturn(false);
+
+        mockMvc.perform(post("/api/rooms/{id}/join", "room-1")
+                .principal(principal("spammer")))
+            .andExpect(status().isTooManyRequests());
+        org.mockito.Mockito.verifyNoInteractions(commandBus);
+    }
+
+    @Test
+    void joinRoomUsesAuthenticatedPrincipalNotAnyClientSuppliedValue() throws Exception {
+        mockMvc.perform(post("/api/rooms/{id}/join", "room-1")
+                .principal(principal("real-user")))
+            .andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<com.conceptarena.room.domain.command.JoinRoomCommand> captor =
+            org.mockito.ArgumentCaptor.forClass(com.conceptarena.room.domain.command.JoinRoomCommand.class);
+        org.mockito.Mockito.verify(commandBus).dispatch(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().userId()).isEqualTo("real-user");
     }
 }

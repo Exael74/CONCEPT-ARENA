@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <springProfile name="!docker">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} [%thread] %highlight(%-5level) %cyan(%logger{30}) - %msg%n</pattern>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE" />
+        </root>
+        <logger name="com.conceptarena" level="DEBUG" />
+    </springProfile>
+
+    <springProfile name="docker">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <!-- O1/O5: valid JSON via LogstashEncoder (proper escaping); ALL MDC keys included
+                 automatically, so userId/roomId (previously missing from this pattern) now appear. -->
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <customFields>{"service":"voice-signaling-service"}</customFields>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE" />
+        </root>
+        <logger name="com.conceptarena" level="INFO" />
+    </springProfile>
+
+</configuration>

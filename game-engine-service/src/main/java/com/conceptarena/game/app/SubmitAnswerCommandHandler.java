@@ -8,6 +8,7 @@ import com.conceptarena.game.domain.Round;
 import com.conceptarena.game.domain.command.SubmitAnswerCommand;
 import com.conceptarena.game.domain.event.AnswerRejected;
 import com.conceptarena.game.domain.event.AnswerSubmitted;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -72,7 +73,15 @@ public class SubmitAnswerCommandHandler implements CommandHandler<SubmitAnswerCo
             answer.markIncorrect();
         }
 
-        roundRepository.save(round);
+        try {
+            roundRepository.save(round);
+        } catch (DataIntegrityViolationException duplicate) {
+            // Two requests from the same user raced past the per-instance check on separate Round
+            // copies; the answers(round_id, user_id) primary key rejected the second insert. Surface
+            // it as a clean duplicate rejection (400), not an unhandled 500 (audit gap #1).
+            reject(command, "duplicate_answer");
+            throw new IllegalStateException("User already answered", duplicate);
+        }
 
         eventBus.publish(new AnswerSubmitted(
             round.getId().value(), command.roomId(), command.userId(),

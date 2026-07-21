@@ -4,7 +4,10 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "session_results")
+@Table(name = "session_results",
+    // A5/C10: one result per (room, user). The DB constraint makes the idempotency guarantee real
+    // across replicas — two replicas processing a duplicate GameEnded can't both insert.
+    uniqueConstraints = @UniqueConstraint(name = "uq_session_results_room_user", columnNames = {"room_id", "user_id"}))
 public class SessionResultEntity {
 
     @Id

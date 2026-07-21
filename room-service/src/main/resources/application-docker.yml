@@ -15,7 +15,7 @@ spring:
         session:
           events:
             log:
-              LOG_QUERIES_SLOWER_THAN_MS: 200
+              LOG_QUERIES_SLOWER_THAN_MS: 100
   flyway:
     locations: classpath:db/migration
   rabbitmq:
@@ -23,6 +23,22 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    # Propagate the trace context over the message bus so a trace continues across the
+    # outbox -> consumer hop, not only across HTTP (audit gap #7).
+    template:
+      observation-enabled: true
+    listener:
+      simple:
+        observation-enabled: true
+
+# Distributed tracing (audit gap #7): report spans to Zipkin (only under the docker profile).
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans
 
 logging:
   level:
@@ -31,3 +47,14 @@ logging:
 app:
   jwt:
     secret: ${JWT_SECRET}   # required — no default, fails fast if unset
+  rate-limiter:
+    # Audit gap #2: shared Redis sliding-window limiter so the 5/s room-action cap holds across
+    # replicas (in-memory by default, so unit tests need no Redis). See RedisRoomActionRateLimiter.
+    store: redis
+  stomp:
+    relay:
+      # Audit gap #7: use RabbitMQ's STOMP plugin as a shared broker so /topic/lobby broadcasts fan
+      # out across all room-service replicas (SimpleBroker by default, so tests need no broker).
+      enabled: true
+      host: ${RABBITMQ_HOST:rabbitmq}
+      port: ${STOMP_RELAY_PORT:61613}

@@ -15,10 +15,7 @@ import com.conceptarena.game.domain.event.RoundEnded;
 import com.conceptarena.game.domain.event.RoundStarted;
 import jakarta.annotation.PostConstruct;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -35,10 +32,12 @@ import org.springframework.stereotype.Service;
  * events fed by RoomReadModelEventConsumer (see ADR-004) instead of the shared in-process bus —
  * GameSaga itself doesn't know or care about that difference.
  *
- * SINGLE-INSTANCE ONLY: {@code games}, {@code activeRoundByRoom} and {@code answeredByRound}
- * are plain in-memory maps on this singleton bean, not externalized to a shared store (e.g.
- * Redis). This service must run at a single replica until this state is externalized — see the
- * security-gap-consolidation ADR on this limitation.
+ * Audit gap #7 remediation (2026-07-15): session state (participants/scores/current round,
+ * which round is active per room, who has answered it) used to live in plain ConcurrentHashMaps
+ * on this singleton bean, which is why this service had to run at a single replica — see
+ * GameStateStore/RoundEndGuard, now externalizable to Redis (RedisGameStateStore/
+ * RedisRoundEndGuard, active when app.game-state.store=redis) so 2+ replicas share one view of
+ * this state. Defaults to the in-memory implementations (same behavior as before) otherwise.
  */
 @Service
 public class GameSaga {
@@ -50,65 +49,63 @@ public class GameSaga {
     private final RoundRepository roundRepository;
     private final TimerPort timerPort;
     private final RoundEndGuard roundEndGuard;
-    private final Map<String, GameState> games = new ConcurrentHashMap<>();
-
-    // Tracks which roundId is active per room for early-end detection
-    private final Map<String, String> activeRoundByRoom = new ConcurrentHashMap<>();
-    // Tracks answers received per active round
-    private final Map<String, Set<String>> answeredByRound = new ConcurrentHashMap<>();
-
-    private static class GameState {
-        final String roomId;
-        final Set<String> participants = new HashSet<>();
-        int currentRound = 0;
-        final int totalRounds = 5;
-        final Map<String, Integer> scores = new HashMap<>();
-        boolean ended = false;
-
-        GameState(String roomId) { this.roomId = roomId; }
-    }
+    private final GameStateStore gameStateStore;
+    private final GameStateLock gameStateLock;
 
     public GameSaga(EventBus eventBus, CommandBus commandBus, RoundRepository roundRepository,
-                     TimerPort timerPort, RoundEndGuard roundEndGuard) {
+                     TimerPort timerPort, RoundEndGuard roundEndGuard, GameStateStore gameStateStore,
+                     GameStateLock gameStateLock) {
         this.eventBus = eventBus;
         this.commandBus = commandBus;
         this.roundRepository = roundRepository;
         this.timerPort = timerPort;
         this.roundEndGuard = roundEndGuard;
+        this.gameStateStore = gameStateStore;
+        this.gameStateLock = gameStateLock;
     }
 
     @PostConstruct
     public void subscribe() {
-        eventBus.subscribe(RoomJoined.class, (EventHandler<RoomJoined>) this::onRoomJoined);
-        eventBus.subscribe(RoomLeft.class, (EventHandler<RoomLeft>) this::onRoomLeft);
-        eventBus.subscribe(RoundStarted.class, (EventHandler<RoundStarted>) this::onRoundStarted);
-        eventBus.subscribe(AnswerSubmitted.class, (EventHandler<AnswerSubmitted>) this::onAnswerSubmitted);
-        eventBus.subscribe(RoundEnded.class, (EventHandler<RoundEnded>) this::onRoundEnded);
+        // Each handler runs under the per-room lock (audit gap #4) so every mutation for one room is
+        // serialized across replicas. The lock is reentrant, so the synchronous nested dispatch
+        // (onRoundEnded -> StartRoundCommand -> RoundStarted -> onRoundStarted) does not self-deadlock.
+        eventBus.subscribe(RoomJoined.class, (EventHandler<RoomJoined>) e ->
+            gameStateLock.runExclusively(e.getAggregateId(), () -> onRoomJoined(e)));
+        eventBus.subscribe(RoomLeft.class, (EventHandler<RoomLeft>) e ->
+            gameStateLock.runExclusively(e.getAggregateId(), () -> onRoomLeft(e)));
+        eventBus.subscribe(RoundStarted.class, (EventHandler<RoundStarted>) e ->
+            gameStateLock.runExclusively(e.getRoomId(), () -> onRoundStarted(e)));
+        eventBus.subscribe(AnswerSubmitted.class, (EventHandler<AnswerSubmitted>) e ->
+            gameStateLock.runExclusively(e.getRoomId(), () -> onAnswerSubmitted(e)));
+        eventBus.subscribe(RoundEnded.class, (EventHandler<RoundEnded>) e ->
+            gameStateLock.runExclusively(e.getRoomId(), () -> onRoundEnded(e)));
     }
 
     private void onRoomJoined(RoomJoined event) {
         String roomId = event.getAggregateId();
-        games.computeIfAbsent(roomId, GameState::new);
-        GameState state = games.get(roomId);
-        state.participants.add(event.getUserId());
-        state.scores.putIfAbsent(event.getUserId(), 0);
+        GameState state = gameStateStore.loadOrCreate(roomId);
+        state.getParticipants().add(event.getUserId());
+        state.getScores().putIfAbsent(event.getUserId(), 0);
+        gameStateStore.save(state);
 
-        if (state.participants.size() >= 2 && state.currentRound == 0 && !state.ended) {
-            log.info("SAGA Starting first round for room {} with {} participants", roomId, state.participants.size());
+        if (state.getParticipants().size() >= 2 && state.getCurrentRound() == 0 && !state.isEnded()) {
+            log.info("SAGA Starting first round for room {} with {} participants", roomId, state.getParticipants().size());
             commandBus.dispatch(new StartRoundCommand(roomId, "system"));
         }
     }
 
     private void onRoomLeft(RoomLeft event) {
         String roomId = event.getAggregateId();
-        GameState state = games.get(roomId);
+        GameState state = gameStateStore.find(roomId);
         if (state != null) {
-            state.participants.remove(event.getUserId());
-            if (state.participants.isEmpty()) {
-                games.remove(roomId);
-                activeRoundByRoom.remove(roomId);
+            state.getParticipants().remove(event.getUserId());
+            if (state.getParticipants().isEmpty()) {
+                gameStateStore.remove(roomId);
+                gameStateStore.clearActiveRound(roomId);
                 timerPort.cancelTimers(roomId);
                 log.info("SAGA Game removed for empty room {}", roomId);
+            } else {
+                gameStateStore.save(state);
             }
         }
     }
@@ -116,34 +113,35 @@ public class GameSaga {
     private void onRoundStarted(RoundStarted event) {
         String roomId = event.getRoomId();
         String roundId = event.getAggregateId();
-        GameState state = games.get(roomId);
+        GameState state = gameStateStore.find(roomId);
         if (state != null) {
-            state.currentRound++;
-            activeRoundByRoom.put(roomId, roundId);
-            answeredByRound.put(roundId, new HashSet<>());
-            log.info("SAGA Round {}/{} started for room {}", state.currentRound, state.totalRounds, roomId);
+            state.setCurrentRound(state.getCurrentRound() + 1);
+            gameStateStore.save(state);
+            gameStateStore.setActiveRound(roomId, roundId);
+            gameStateStore.clearAnswered(roundId);
+            log.info("SAGA Round {}/{} started for room {}", state.getCurrentRound(), state.getTotalRounds(), roomId);
         }
     }
 
     private void onAnswerSubmitted(AnswerSubmitted event) {
         String roomId = event.getRoomId();
         String roundId = event.getAggregateId();
-        GameState state = games.get(roomId);
+        GameState state = gameStateStore.find(roomId);
         if (state == null) return;
 
-        Set<String> answered = answeredByRound.computeIfAbsent(roundId, k -> new HashSet<>());
-        answered.add(event.getUserId());
+        gameStateStore.addAnswered(roundId, event.getUserId());
+        int answeredCount = gameStateStore.answeredCount(roundId);
 
         // HU-07: Early-end — if all active participants have answered, end the round immediately
-        if (answered.size() >= state.participants.size() && !state.participants.isEmpty()) {
-            log.info("SAGA All {} participants answered round {} — triggering early end", answered.size(), roundId);
+        if (answeredCount >= state.getParticipants().size() && !state.getParticipants().isEmpty()) {
+            log.info("SAGA All {} participants answered round {} — triggering early end", answeredCount, roundId);
             triggerEarlyRoundEnd(roundId, roomId);
         }
     }
 
     private void triggerEarlyRoundEnd(String roundId, String roomId) {
-        activeRoundByRoom.remove(roomId);
-        answeredByRound.remove(roundId);
+        gameStateStore.clearActiveRound(roomId);
+        gameStateStore.clearAnswered(roundId);
         timerPort.cancelTimers(roomId);
 
         if (!roundEndGuard.tryClaim(roundId)) {
@@ -172,30 +170,31 @@ public class GameSaga {
     }
 
     private void onRoundEnded(RoundEnded event) {
-        GameState state = games.get(event.getRoomId());
+        GameState state = gameStateStore.find(event.getRoomId());
         if (state == null) return;
 
         // Accumulate scores from the round
         event.getScores().forEach((userId, score) ->
-            state.scores.merge(userId, score, Integer::sum)
+            state.getScores().merge(userId, score, Integer::sum)
         );
 
-        answeredByRound.remove(event.getAggregateId());
+        gameStateStore.clearAnswered(event.getAggregateId());
         roundEndGuard.release(event.getAggregateId());
 
-        if (state.currentRound >= state.totalRounds) {
-            state.ended = true;
-            games.remove(event.getRoomId());
-            log.info("SAGA Game ENDED for room {} — final scores: {}", event.getRoomId(), state.scores);
-            eventBus.publish(new GameEnded(state.roomId, new HashMap<>(state.scores)));
+        if (state.getCurrentRound() >= state.getTotalRounds()) {
+            state.setEnded(true);
+            gameStateStore.remove(event.getRoomId());
+            log.info("SAGA Game ENDED for room {} — final scores: {}", event.getRoomId(), state.getScores());
+            eventBus.publish(new GameEnded(state.getRoomId(), new HashMap<>(state.getScores())));
         } else {
-            commandBus.dispatch(new StartRoundCommand(state.roomId, "system"));
+            gameStateStore.save(state);
+            commandBus.dispatch(new StartRoundCommand(state.getRoomId(), "system"));
         }
     }
 
     /** Returns current accumulated scores for the room, or null if no game is active. */
     public Map<String, Integer> getScores(String roomId) {
-        GameState state = games.get(roomId);
-        return state == null ? null : new HashMap<>(state.scores);
+        GameState state = gameStateStore.find(roomId);
+        return state == null ? null : new HashMap<>(state.getScores());
     }
 }

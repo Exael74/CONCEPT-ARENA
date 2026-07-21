@@ -1,0 +1,15 @@
+# Grafana auto-provisions these datasources on startup (audit gap #2) so the stack comes up already
+# wired — no manual "add datasource" click. Fixed uids let the provisioned dashboard reference them.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100

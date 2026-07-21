@@ -7,6 +7,7 @@ import com.conceptarena.auth.domain.command.RegisterUserCommand;
 import com.conceptarena.auth.domain.error.DuplicateEmailException;
 import com.conceptarena.auth.domain.error.InvalidCredentialsException;
 import com.conceptarena.auth.web.dto.ApiResponse;
+import com.conceptarena.kernel.error.DomainException;
 import com.conceptarena.kernel.valueobject.PasswordHash;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +36,11 @@ public class UserController {
         } catch (DuplicateEmailException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(e.getMessage()));
+        } catch (DomainException e) {
+            // A1: an invalid email (Email value object throws DomainException) is a client error —
+            // return 400, not the generic 500 the unhandled DomainException used to fall through to.
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(e.getMessage()));
@@ -52,6 +58,10 @@ public class UserController {
             return ResponseEntity.ok(ApiResponse.success("Login successful — use token as Bearer", token));
         } catch (InvalidCredentialsException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error(e.getMessage()));
+        } catch (DomainException e) {
+            // A1: invalid email format on login is a 400, not a 500.
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(e.getMessage()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)

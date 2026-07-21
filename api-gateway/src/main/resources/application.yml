@@ -1,0 +1,77 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URI:http://localhost:8081}
+          predicates:
+            - Path=/api/auth/**
+        - id: room-service-rest
+          uri: ${ROOM_SERVICE_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/rooms/**
+        - id: concept-bank-service
+          uri: ${CONCEPTBANK_SERVICE_URI:http://localhost:8084}
+          predicates:
+            - Path=/api/concept-banks/**
+        - id: game-engine-service-rest
+          uri: ${GAME_SERVICE_URI:http://localhost:8083}
+          predicates:
+            - Path=/api/game/**,/api/sessions/**
+        # WebSocket routes — see docs/event-contracts.md and each service's RawWebSocketConfig/
+        # StompConfig for the exact paths mirrored here. The STOMP endpoints carry the outbound
+        # realtime pushes (lobby room list, participants, round/timer events) the frontend
+        # subscribes to; the raw endpoints carry inbound gameplay messages.
+        - id: room-service-ws
+          uri: ${ROOM_SERVICE_WS_URI:ws://localhost:8082}
+          predicates:
+            - Path=/ws/lobby/**
+        - id: room-service-stomp
+          uri: ${ROOM_SERVICE_WS_URI:ws://localhost:8082}
+          predicates:
+            - Path=/ws/room-stomp/**
+        - id: game-engine-service-ws
+          uri: ${GAME_SERVICE_WS_URI:ws://localhost:8083}
+          predicates:
+            - Path=/ws/game/**
+        - id: game-engine-service-stomp
+          uri: ${GAME_SERVICE_WS_URI:ws://localhost:8083}
+          predicates:
+            - Path=/ws/game-stomp/**
+        - id: voice-signaling-service-ws
+          uri: ${VOICE_SERVICE_WS_URI:ws://localhost:8085}
+          predicates:
+            - Path=/ws/signaling/**
+      # A9: security response headers applied to every proxied response at the single entry point,
+      # so the backend services don't each have to (and browsers get consistent hardening).
+      default-filters:
+        - AddResponseHeader=X-Content-Type-Options, nosniff
+        - AddResponseHeader=X-Frame-Options, DENY
+        - AddResponseHeader=Referrer-Policy, no-referrer
+        - AddResponseHeader=Permissions-Policy, geolocation=(), camera=(), microphone=(self)
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+            allowedHeaders: "*"
+
+logging:
+  level:
+    com.conceptarena: DEBUG
+    org.springframework.cloud.gateway: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus,gateway
+  metrics:
+    export:
+      prometheus:
+        enabled: true

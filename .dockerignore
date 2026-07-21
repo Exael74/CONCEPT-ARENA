@@ -1,0 +1,27 @@
+# D9: keep the Docker build context small and reproducible — exclude build output, VCS, IDE files,
+# the separately-built frontend/mock, docs, and local run artifacts. The Java service Dockerfiles
+# COPY the repo root, so anything not needed to run `mvn package` should be excluded here.
+**/target/
+.git/
+.gitattributes
+.gitignore
+
+**/node_modules/
+**/dist/
+frontend/
+mock/
+
+*.log
+scripts/load/*.txt
+
+.idea/
+*.iml
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+
+.env
+*.md
+docs/

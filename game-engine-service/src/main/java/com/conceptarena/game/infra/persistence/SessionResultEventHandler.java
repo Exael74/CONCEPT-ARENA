@@ -86,7 +86,15 @@ public class SessionResultEventHandler {
                 totalTimeMs,
                 Instant.now()
             );
-            sessionResultRepository.save(entity);
+            try {
+                sessionResultRepository.save(entity);
+            } catch (org.springframework.dao.DataIntegrityViolationException dup) {
+                // A5: a concurrent duplicate GameEnded on another replica won the
+                // uq_session_results_room_user constraint first — treat as already-persisted,
+                // don't fail the handler (belt-and-suspenders with the existsBy check above).
+                log.warn("SKIPPED duplicate SessionResult (unique constraint) for user={}, room={}", userId, roomId);
+                return;
+            }
             log.info("PERSISTED SessionResult: user={}, room={}, points={}, correct={}, incorrect={}",
                 userId, roomId, totalPoints, correct, incorrect);
         });

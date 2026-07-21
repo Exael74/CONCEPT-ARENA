@@ -32,25 +32,39 @@ class JoinRoomCommandHandlerTest {
     }
 
     @Test
-    void joinsRoomByIdAndPublishesEvent() {
+    void joinsRoomByIdAndPublishesEventAndReturnsRoomId() {
         Room room = Room.create("Study Room", RoomType.PUBLIC, null, "bank-1", 4);
         when(roomRepository.findById(room.getId().value())).thenReturn(Optional.of(room));
 
-        handler.handle(new JoinRoomCommand(room.getId().value(), "user-1", null));
+        String joinedRoomId = handler.handle(new JoinRoomCommand(room.getId().value(), "user-1", null));
 
+        assertThat(joinedRoomId).isEqualTo(room.getId().value());
         assertThat(room.findParticipant("user-1")).isPresent();
         verify(roomRepository).save(room);
         verify(eventBus).publish(any(RoomJoined.class));
     }
 
     @Test
-    void joinsRoomByInviteCodeWhenNoRoomIdGiven() {
+    void joinsRoomByInviteCodeWhenNoRoomIdGivenAndReturnsRoomId() {
         Room room = Room.create("Private Room", RoomType.PRIVATE, "ABC123", "bank-1", 4);
         when(roomRepository.findByInviteCode("ABC123")).thenReturn(Optional.of(room));
 
-        handler.handle(new JoinRoomCommand(null, "user-1", "ABC123"));
+        String joinedRoomId = handler.handle(new JoinRoomCommand(null, "user-1", "ABC123"));
 
+        assertThat(joinedRoomId).isEqualTo(room.getId().value());
         assertThat(room.findParticipant("user-1")).isPresent();
+    }
+
+    @Test
+    void rejectsJoiningPrivateRoomByIdWithoutItsInviteCode() {
+        Room room = Room.create("Private Room", RoomType.PRIVATE, "ABC123", "bank-1", 4);
+        when(roomRepository.findById(room.getId().value())).thenReturn(Optional.of(room));
+
+        assertThatThrownBy(() -> handler.handle(new JoinRoomCommand(room.getId().value(), "user-1", null)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("invite code");
+
+        assertThat(room.findParticipant("user-1")).isEmpty();
     }
 
     @Test

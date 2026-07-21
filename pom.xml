@@ -11,26 +11,19 @@
     <name>ConceptArena</name>
     <description>Plataforma web multijugador de estudio colaborativo en tiempo real - Event Driven Architecture</description>
 
-    <!-- Modules are split into two groups during the microservices migration:
-         "legacy monolith" modules (kept building/passing tests throughout the migration
-         as the reference implementation, retired once the new services + e2e tests
-         fully supersede them) and "new microservices" modules (added incrementally,
-         one per completed migration phase, per docs/architecture-decisions/). -->
+    <!-- E6/E7/E8: the legacy monolith modules (core/app/infra/web/bootstrap) were removed from the
+         reactor and deleted. They were dead code — duplicating the kernel's Command/DomainEvent/
+         EntityId/Email/PasswordHash and the services' controllers — kept only as a migration
+         reference. The microservices + kernel now fully supersede them. -->
     <modules>
-        <!-- legacy monolith (see above) -->
-        <module>core</module>
-        <module>app</module>
-        <module>infra</module>
-        <module>web</module>
-        <module>bootstrap</module>
-
-        <!-- new microservices -->
         <module>conceptarena-kernel</module>
         <module>jwt-validation-lib</module>
         <module>concept-bank-service</module>
         <module>auth-service</module>
         <module>room-service</module>
         <module>game-engine-service</module>
+        <module>api-gateway</module>
+        <module>voice-signaling-service</module>
     </modules>
 
     <parent>
@@ -45,34 +38,25 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <jjwt.version>0.12.6</jjwt.version>
+        <!-- O1: valid structured JSON logging (replaces the hand-rolled PatternLayout pseudo-JSON). -->
+        <logstash-logback.version>7.4</logstash-logback.version>
         <!-- The Mockito/ByteBuddy versions pinned by spring-boot-starter-parent 3.2.4
              don't support mocking classes on newer JDKs (e.g. JDK 23); bump both. -->
         <mockito.version>5.14.2</mockito.version>
         <byte-buddy.version>1.15.11</byte-buddy.version>
+
+        <!-- Static analysis + coverage (SonarQube). Bring up a local server with
+             sonar/docker-compose.yml, then `mvn clean verify` (writes JaCoCo reports) and
+             `mvn sonar:sonar -Dsonar.token=...`. sonar.host.url is overridable on the command line. -->
+        <jacoco.version>0.8.13</jacoco.version>
+        <sonar.projectKey>conceptarena</sonar.projectKey>
+        <sonar.projectName>ConceptArena</sonar.projectName>
+        <sonar.host.url>http://localhost:9000</sonar.host.url>
+        <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <dependency>
-                <groupId>com.conceptarena</groupId>
-                <artifactId>core</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.conceptarena</groupId>
-                <artifactId>app</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.conceptarena</groupId>
-                <artifactId>infra</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.conceptarena</groupId>
-                <artifactId>web</artifactId>
-                <version>${project.version}</version>
-            </dependency>
             <dependency>
                 <groupId>com.conceptarena</groupId>
                 <artifactId>conceptarena-kernel</artifactId>
@@ -82,6 +66,11 @@
                 <groupId>com.conceptarena</groupId>
                 <artifactId>jwt-validation-lib</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.logstash.logback</groupId>
+                <artifactId>logstash-logback-encoder</artifactId>
+                <version>${logstash-logback.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>
@@ -102,5 +91,39 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <!-- Coverage for SonarQube: instruments tests and writes target/site/jacoco/jacoco.xml
+                     in every module. 0.8.13 is the first JaCoCo release that supports JDK 23 (this
+                     repo's toolchain), so this must not be downgraded to the version Boot 3.2.4 pins. -->
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>jacoco-prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>jacoco-report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <!-- Pinned so `mvn sonar:sonar` resolves a known scanner version. -->
+                <groupId>org.sonarsource.scanner.maven</groupId>
+                <artifactId>sonar-maven-plugin</artifactId>
+                <version>4.0.0.4121</version>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

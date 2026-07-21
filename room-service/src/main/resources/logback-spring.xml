@@ -16,8 +16,9 @@
 
     <springProfile name="docker">
         <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
-            <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-                <pattern>{"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}","level":"%level","service":"room-service","logger":"%logger{30}","thread":"%thread","requestId":"%X{requestId}","eventId":"%X{eventId}","eventType":"%X{eventType}","userId":"%X{userId}","roomId":"%X{roomId}","message":"%msg"}%n</pattern>
+            <!-- O1: valid JSON via LogstashEncoder (proper escaping); all MDC keys included. -->
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <customFields>{"service":"room-service"}</customFields>
             </encoder>
         </appender>
 

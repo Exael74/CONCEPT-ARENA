@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.conceptarena</groupId>
+        <artifactId>conceptarena</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>voice-signaling-service</artifactId>
+    <packaging>jar</packaging>
+
+    <name>voice-signaling-service</name>
+    <description>
+        WebRTC signaling relay (offer/answer/ICE candidate exchange between peers in a room).
+        Audit gap #3 remediation: previously missing from the repo entirely. No persistence and
+        no domain/command/event model (unlike the other services) — it relays live WebSocket
+        traffic between currently-connected peers only, so it has a flatter websocket/dto/
+        controller structure instead of domain/app/infra/web. Single-instance-per-room-signaling
+        only: presence (SignalingPresenceRegistry) is in-memory, same class of limitation
+        GameSaga had before its Redis externalization — not fixed here because, unlike GameSaga's
+        room lifecycle, a live WebRTC signaling exchange is inherently tied to the one instance
+        each peer's socket is connected to; sharing it across replicas needs a pub/sub relay
+        (e.g. Redis Pub/Sub), not just a shared key-value store, so it's future work, not a
+        same-shape fix.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.conceptarena</groupId>
+            <artifactId>jwt-validation-lib</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <!-- O1: structured JSON logs (valid JSON with proper escaping, all MDC keys included). -->
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+        </dependency>
+        <dependency>
+            <!-- Audit gap #7: distributed tracing (Micrometer -> Brave -> Zipkin), so a request or
+                 event can be followed across all services by traceId. Enabled only under the docker
+                 profile (application-docker.yml); default/test runs sample nothing. -->
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.conceptarena.voice.VoiceSignalingServiceApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

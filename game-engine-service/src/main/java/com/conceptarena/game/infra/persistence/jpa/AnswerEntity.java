@@ -7,8 +7,12 @@ import java.time.Instant;
 @Table(name = "answers")
 public class AnswerEntity {
 
+    // Deterministic id = roundId + "::" + userId (assigned in RoundMapper) instead of a random
+    // UUID: it makes RoundRepository.save idempotent (re-saving a round updates each answer row in
+    // place rather than orphan-removing and re-inserting the whole set) and, crucially, turns the
+    // "one answer per user per round" invariant into a PRIMARY KEY the database enforces — so two
+    // requests from the same user racing on separate Round copies can't both insert (audit gap #1).
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
     @Column(nullable = false)

@@ -1,0 +1,33 @@
+# S2: Kubernetes base objects — namespace, shared config, and the JWT secret placeholder.
+# Apply order: base.yaml -> app-deployments.yaml -> hpa.yaml. See k8s/README.md.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: conceptarena
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: conceptarena-config
+  namespace: conceptarena
+data:
+  SPRING_PROFILES_ACTIVE: "docker"
+  # In-cluster service DNS names (deploy infra via their Helm charts or your managed offerings and
+  # point these at the resulting Services).
+  RABBITMQ_HOST: "rabbitmq"
+  AUTH_DB_HOST: "auth-db"
+  ROOM_OUTBOX_DB_HOST: "room-outbox-db"
+  CONCEPTBANK_DB_HOST: "conceptbank-db"
+  GAME_DB_HOST: "game-db"
+  GAME_REDIS_HOST: "game-redis"
+  REDIS_HOST: "room-redis"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: conceptarena-secrets
+  namespace: conceptarena
+type: Opaque
+stringData:
+  # Replace before applying (or create via `kubectl create secret`). Must be >= 256 bits for HS256.
+  JWT_SECRET: "CHANGE-ME-to-a-real-256-bit-secret-do-not-commit-the-real-one"

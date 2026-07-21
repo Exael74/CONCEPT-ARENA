@@ -1,0 +1,116 @@
+# Alert rules (audit gap #2 + #5 remediation): turns the dashboards from PASSIVE (someone has to be
+# looking) into ACTIVE (Prometheus fires when a threshold is crossed). Wired to Grafana's built-in
+# alerting via the Prometheus datasource; no separate Alertmanager is required for the rules to
+# evaluate and surface in Prometheus /alerts and Grafana.
+groups:
+  - name: conceptarena-availability
+    rules:
+      - alert: ServiceDown
+        expr: up{job="conceptarena-services"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.app }} is down"
+          description: "Prometheus has failed to scrape {{ $labels.app }} ({{ $labels.instance }}) for 1m."
+
+      - alert: RabbitMQDown
+        expr: up{job="rabbitmq"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "RabbitMQ is down"
+          description: "RabbitMQ metrics have been unscrapeable for 1m — outbox events stop flowing between services."
+
+  - name: conceptarena-latency-errors
+    rules:
+      # Directly measures KPI-1 (round latency budget). p95 of the HTTP timer per service.
+      - alert: HighP95Latency
+        expr: histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{job="conceptarena-services"}[5m])) by (le, app)) > 0.5
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "p95 latency above 500ms on {{ $labels.app }}"
+          description: "95th-percentile HTTP latency on {{ $labels.app }} has exceeded 500ms for 5m (SLO: p95 < 500ms)."
+
+      # errors_total is incremented by each service's GlobalExceptionHandler; it carries its own
+      # `service` tag, so group by that.
+      - alert: HighErrorRate
+        expr: sum(rate(errors_total[5m])) by (service) > 1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Elevated error rate on {{ $labels.service }}"
+          description: "{{ $labels.service }} is recording more than 1 error/s (errors_total) over 5m."
+
+  - name: conceptarena-capacity
+    rules:
+      # S10: capacity/saturation alerts, so a scale-up decision has a trigger (there is no HPA under
+      # plain docker-compose; under k8s these map to HPA targets — see k8s/).
+      - alert: HighCpuUsage
+        expr: process_cpu_usage{job="conceptarena-services"} > 0.85
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "High CPU on {{ $labels.app }}"
+          description: "{{ $labels.app }} process CPU usage has been above 85% for 5m — consider scaling out."
+      - alert: HighJvmHeapUsage
+        expr: |
+          sum(jvm_memory_used_bytes{area="heap",job="conceptarena-services"}) by (app)
+          / sum(jvm_memory_max_bytes{area="heap",job="conceptarena-services"}) by (app) > 0.9
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "High JVM heap on {{ $labels.app }}"
+          description: "{{ $labels.app }} heap usage has been above 90% of max for 5m — risk of GC thrash/OOM."
+
+  - name: conceptarena-messaging
+    rules:
+      # Audit gap #5: without this, a stalled consumer (e.g. game-engine's read-model listener) or a
+      # DoS flood would grow a queue unbounded and the system would degrade silently.
+      - alert: RabbitMQQueueLagGrowing
+        expr: rabbitmq_queue_messages_ready > 500
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Queue lag on {{ $labels.queue }}"
+          description: "Queue {{ $labels.queue }} has held more than 500 ready messages for 2m — a consumer is down or falling behind."
+
+  # Multi-window multi-burn-rate alerts against the 99.9% availability SLO (see docs/slos.md).
+  # Error budget = 0.1%. Requiring two windows to agree suppresses flapping on a single spike.
+  - name: conceptarena-slo-burn-rate
+    rules:
+      # Fast burn (14.4x) would exhaust a 30-day budget in ~2 days -> page.
+      - alert: SLOFastErrorBudgetBurn
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{job="conceptarena-services",outcome="SERVER_ERROR"}[5m])) by (app)
+            / sum(rate(http_server_requests_seconds_count{job="conceptarena-services"}[5m])) by (app)
+          ) > (14.4 * 0.001)
+          and
+          (
+            sum(rate(http_server_requests_seconds_count{job="conceptarena-services",outcome="SERVER_ERROR"}[1h])) by (app)
+            / sum(rate(http_server_requests_seconds_count{job="conceptarena-services"}[1h])) by (app)
+          ) > (14.4 * 0.001)
+        for: 2m
+        labels: { severity: critical, slo: availability }
+        annotations:
+          summary: "Fast error-budget burn on {{ $labels.app }}"
+          description: "{{ $labels.app }} is burning its 99.9% availability budget at >14.4x (5m and 1h windows) — see docs/slos.md."
+
+      # Slow burn (6x) -> ticket, catches a steady low-grade error rate before it drains the budget.
+      - alert: SLOSlowErrorBudgetBurn
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{job="conceptarena-services",outcome="SERVER_ERROR"}[30m])) by (app)
+            / sum(rate(http_server_requests_seconds_count{job="conceptarena-services"}[30m])) by (app)
+          ) > (6 * 0.001)
+          and
+          (
+            sum(rate(http_server_requests_seconds_count{job="conceptarena-services",outcome="SERVER_ERROR"}[6h])) by (app)
+            / sum(rate(http_server_requests_seconds_count{job="conceptarena-services"}[6h])) by (app)
+          ) > (6 * 0.001)
+        for: 15m
+        labels: { severity: warning, slo: availability }
+        annotations:
+          summary: "Slow error-budget burn on {{ $labels.app }}"
+          description: "{{ $labels.app }} is burning its 99.9% availability budget at >6x (30m and 6h windows) — see docs/slos.md."

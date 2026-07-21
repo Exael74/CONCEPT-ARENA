@@ -39,7 +39,9 @@ class GameSagaTest {
     @Mock private CommandBus commandBus;
     @Mock private RoundRepository roundRepository;
     @Mock private TimerPort timerPort;
-    private final RoundEndGuard roundEndGuard = new RoundEndGuard();
+    private final RoundEndGuard roundEndGuard = new com.conceptarena.game.infra.state.InMemoryRoundEndGuard();
+    private final GameStateStore gameStateStore = new com.conceptarena.game.infra.state.InMemoryGameStateStore();
+    private final GameStateLock gameStateLock = new com.conceptarena.game.infra.state.InMemoryGameStateLock();
 
     private EventHandler<RoomJoined> roomJoinedHandler;
     private EventHandler<RoomLeft> roomLeftHandler;
@@ -49,7 +51,7 @@ class GameSagaTest {
 
     @BeforeEach
     void setUp() {
-        GameSaga saga = new GameSaga(eventBus, commandBus, roundRepository, timerPort, roundEndGuard);
+        GameSaga saga = new GameSaga(eventBus, commandBus, roundRepository, timerPort, roundEndGuard, gameStateStore, gameStateLock);
         saga.subscribe();
 
         roomJoinedHandler = captureHandler(RoomJoined.class);

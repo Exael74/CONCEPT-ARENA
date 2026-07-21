@@ -3,12 +3,14 @@ package com.conceptarena.conceptbank.infra.messaging.outbox;
 import com.conceptarena.conceptbank.app.bus.EventBus;
 import com.conceptarena.conceptbank.app.bus.EventHandler;
 import com.conceptarena.conceptbank.domain.event.ConceptBankCreated;
+import com.conceptarena.conceptbank.infra.security.CorrelationIdFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 /**
@@ -48,7 +50,8 @@ public class OutboxWritingEventHandler {
         try {
             String json = objectMapper.writeValueAsString(payload);
             OutboxEvent row = new OutboxEvent(
-                UUID.randomUUID().toString(), aggregateId, eventType, EXCHANGE, routingKey, json, Instant.now());
+                UUID.randomUUID().toString(), aggregateId, eventType, EXCHANGE, routingKey, json, Instant.now(),
+                MDC.get(CorrelationIdFilter.MDC_KEY));
             outboxEventRepository.save(row);
         } catch (Exception e) {
             // A serialization failure here would silently drop the event from the outbox even
