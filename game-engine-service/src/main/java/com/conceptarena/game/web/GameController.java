@@ -1,7 +1,9 @@
 package com.conceptarena.game.web;
 
 import com.conceptarena.game.app.GameSaga;
+import com.conceptarena.game.app.RoundRepository;
 import com.conceptarena.game.app.bus.CommandBus;
+import com.conceptarena.game.domain.Round;
 import com.conceptarena.game.domain.command.StartRoundCommand;
 import com.conceptarena.game.domain.command.SubmitAnswerCommand;
 import com.conceptarena.game.domain.error.NotRoomOwnerException;
@@ -20,11 +22,14 @@ public class GameController {
     private final CommandBus commandBus;
     private final GameSaga gameSaga;
     private final AnswerRateLimiter rateLimiter;
+    private final RoundRepository roundRepository;
 
-    public GameController(CommandBus commandBus, GameSaga gameSaga, AnswerRateLimiter rateLimiter) {
+    public GameController(CommandBus commandBus, GameSaga gameSaga, AnswerRateLimiter rateLimiter,
+                          RoundRepository roundRepository) {
         this.commandBus = commandBus;
         this.gameSaga = gameSaga;
         this.rateLimiter = rateLimiter;
+        this.roundRepository = roundRepository;
     }
 
     /**
@@ -84,5 +89,34 @@ public class GameController {
         return ResponseEntity.ok(ApiResponse.success("Ranking for room: " + roomId, scores));
     }
 
+    /**
+     * REST fallback for "what round is active right now" — STOMP broadcasts (ROUND_STARTED etc.)
+     * only reach clients already subscribed at the moment they're sent; a client that connects or
+     * (re)subscribes mid-round never receives that past message (no replay in pub/sub), so it has
+     * no other way to learn the current question. The frontend should call this on room/game
+     * screen load and on WS reconnect, not rely solely on the live stream to always be caught up.
+     * expectedAnswer is deliberately omitted, same as concept-bank-service's GET endpoints.
+     */
+    @GetMapping("/{roomId}/current-round")
+    public ResponseEntity<ApiResponse<CurrentRoundResponse>> getCurrentRound(
+            @PathVariable String roomId, Principal principal) {
+        return roundRepository.findActiveRoundByRoomId(roomId)
+            .map(round -> ResponseEntity.ok(ApiResponse.success("Current round", toResponse(round, principal.getName()))))
+            .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error("No active round for room: " + roomId)));
+    }
+
+    private CurrentRoundResponse toResponse(Round round, String userId) {
+        long remainingSeconds = Math.max(0,
+            round.getDuration().getSeconds() - round.getElapsedTime().getSeconds());
+        return new CurrentRoundResponse(
+            round.getId().value(), round.getConceptQuestion(), round.getDifficulty(),
+            round.getDuration().getSeconds(), remainingSeconds, round.getAnswers().containsKey(userId));
+    }
+
     public record SubmitAnswerRequest(String answerText) {}
+
+    public record CurrentRoundResponse(
+        String roundId, String question, int difficulty,
+        long durationSeconds, long remainingSeconds, boolean alreadyAnswered) {}
 }

@@ -96,14 +96,22 @@ and use the verify screen instead).
 | Method | Path | Auth | Body | Notes |
 |---|---|---|---|---|
 | GET | `/api/rooms` | public | — | lobby list: id, name, type, status, participants, maxParticipants |
-| GET | `/api/rooms/{id}` | public | — | detail incl. participants; **inviteCode never included** |
-| POST | `/api/rooms` | JWT | `{ name, type, conceptBankId, maxParticipants }` | `type`: `PUBLIC` \| `PRIVATE`; response `data: { roomId, inviteCode }` — invite code is returned **once**, only to the creator |
+| GET | `/api/rooms/{id}` | public | — | detail incl. participants + `creatorUserId`; **inviteCode never included** |
+| POST | `/api/rooms` | JWT | `{ name, type, conceptBankId, maxParticipants }` | `type`: `PUBLIC` \| `PRIVATE`; `conceptBankId` must be a real, non-empty bank id — a blank one is now rejected (400) at creation, it used to silently create an unplayable room; response `data: { roomId, inviteCode }` — invite code is returned **once**, only to the creator |
 | POST | `/api/rooms/{id}/join` | JWT | — | join a public room by id |
 | POST | `/api/rooms/join/{code}` | JWT | — | join a private room by invite code; response `data`: the roomId |
 | POST | `/api/rooms/{id}/leave` | JWT | — | |
 
 `userId` is **never** taken from the request body on any of these — always the JWT. Room-action
 endpoints are rate-limited per user; a `429` means "slow down", not a real error.
+
+**`status` on a room is always `"WAITING"`, even mid-game.** This is a deliberate architecture
+decision (room-service never learns a game started — see ADR-004, avoids a synchronous cross-service
+call) — don't use it to detect "is this room currently playing." Use `creatorUserId` (compare
+against the logged-in user's own id, decoded from the JWT `sub` claim) to decide whether to show the
+"Start" button — only the creator can successfully call `POST /api/game/{roomId}/start` (see §7);
+everyone else gets a `403`. To detect an in-progress game, poll/call `GET /api/game/{roomId}/current-round`
+(§7) instead of relying on `status`.
 
 ## 6. Concept banks (concept-bank-service, `/api/concept-banks/**`)
 
@@ -120,11 +128,19 @@ duplicate that normalization client-side, just send what the user typed.
 
 | Method | Path | Auth | Body |
 |---|---|---|---|
-| POST | `/api/game/{roomId}/start` | JWT | — starts the round loop for a room |
-| POST | `/api/game/{roomId}/answer` | JWT | `{ answerText }` — rate-limited to 3/sec/user, same limiter as the WS path below |
+| POST | `/api/game/{roomId}/start` | JWT | — starts the round loop for a room. **Only the room's creator can call this successfully** — anyone else gets `403` with `message: "Only the room creator can start the game: ..."`. Hide/disable the Start button for non-creators (compare `creatorUserId` from `GET /api/rooms/{id}` against your own JWT `sub`) rather than showing this as a generic error. |
+| POST | `/api/game/{roomId}/answer` | JWT | `{ answerText }` — rate-limited to 3/sec/user, same limiter as the WS path below. A `400` with `message` starting "Round ended before this answer" means the round transitioned (ended/next round started) between when you loaded the question and when you submitted — re-fetch `current-round` (below) and let the user try again on whatever's now active, don't treat it as a hard failure. |
+| GET | `/api/game/{roomId}/current-round` | JWT | `data`: `{ roundId, question, difficulty, durationSeconds, remainingSeconds, alreadyAnswered }` for the calling user, or `404` if no round is active right now. **Call this on room/game screen load and on WS reconnect** — STOMP never replays past broadcasts, so a client that connects mid-round (e.g. the 2nd player joining after round 1 already started) will otherwise never learn the current question and gets stuck showing the lobby/an old round forever. `expectedAnswer` is deliberately never returned. |
 | GET | `/api/game/{roomId}/ranking` | public | `data`: `{ userId: score, ... }` |
 | GET | `/api/sessions/results?userId={id}` | public | a user's historical session results |
 | GET | `/api/sessions/results/room/{roomId}` | public | one room's results |
+
+**The auto-start-on-2-players behavior**: the game also auto-starts the moment a 2nd participant
+joins a room (not only via the explicit Start button) — so in a fast-moving room, round 1 can begin
+before a 3rd/4th intended player has finished connecting. There is currently no "wait for everyone"
+grace period; this is a known product-behavior gap, not a bug, and is being reconsidered separately.
+Regardless of how/when a round starts, the `current-round` polling pattern above is what keeps every
+client's UI correct even if they missed the exact moment it happened.
 
 ## 8. Voice signaling (voice-signaling-service, `/api/signaling/**`, `/ws/signaling`)
 

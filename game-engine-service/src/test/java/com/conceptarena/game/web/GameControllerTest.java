@@ -8,12 +8,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.conceptarena.game.app.GameSaga;
+import com.conceptarena.game.app.RoundRepository;
 import com.conceptarena.game.app.bus.CommandBus;
+import com.conceptarena.game.domain.Round;
 import com.conceptarena.game.infra.ws.AnswerRateLimiter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.security.Principal;
+import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -32,6 +36,7 @@ class GameControllerTest {
     @MockBean private GameSaga gameSaga;
     @MockBean private AnswerRateLimiter rateLimiter;
     @MockBean private MeterRegistry meterRegistry;
+    @MockBean private RoundRepository roundRepository;
 
     private static Principal principal(String userId) {
         return () -> userId;
@@ -117,6 +122,44 @@ class GameControllerTest {
         when(gameSaga.getScores("room-1")).thenReturn(null);
 
         mockMvc.perform(get("/api/game/{roomId}/ranking", "room-1"))
+            .andExpect(status().isNotFound());
+    }
+
+    /**
+     * REST fallback for a client that (re)connects mid-round: STOMP never replays past
+     * broadcasts, so this is the only way such a client learns the current question.
+     */
+    @Test
+    void getCurrentRoundReturnsActiveRoundData() throws Exception {
+        Round round = new Round("room-1", "What is polymorphism?", "polymorphism", 2, Duration.ofSeconds(30));
+        round.start();
+        when(roundRepository.findActiveRoundByRoomId("room-1")).thenReturn(Optional.of(round));
+
+        mockMvc.perform(get("/api/game/{roomId}/current-round", "room-1").principal(principal("user-1")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.question").value("What is polymorphism?"))
+            .andExpect(jsonPath("$.data.difficulty").value(2))
+            .andExpect(jsonPath("$.data.durationSeconds").value(30))
+            .andExpect(jsonPath("$.data.alreadyAnswered").value(false));
+    }
+
+    @Test
+    void getCurrentRoundMarksAlreadyAnsweredForTheCallingUser() throws Exception {
+        Round round = new Round("room-1", "What is polymorphism?", "polymorphism", 2, Duration.ofSeconds(30));
+        round.start();
+        round.submitAnswer("user-1", "polymorphism");
+        when(roundRepository.findActiveRoundByRoomId("room-1")).thenReturn(Optional.of(round));
+
+        mockMvc.perform(get("/api/game/{roomId}/current-round", "room-1").principal(principal("user-1")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.alreadyAnswered").value(true));
+    }
+
+    @Test
+    void getCurrentRoundReturnsNotFoundWhenNoActiveRound() throws Exception {
+        when(roundRepository.findActiveRoundByRoomId("room-1")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/game/{roomId}/current-round", "room-1").principal(principal("user-1")))
             .andExpect(status().isNotFound());
     }
 }
