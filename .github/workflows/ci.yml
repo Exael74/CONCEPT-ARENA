@@ -34,6 +34,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate docker-compose config
         run: JWT_SECRET=ci-validation-secret-key-at-least-256-bits-long-000000 docker compose config -q
+      - name: Validate deployed stack (backend + Caddy TLS overlay)
+        run: JWT_SECRET=ci-validation-secret-key-at-least-256-bits-long-000000 CADDY_SITE=localhost docker compose -f docker-compose.backend.yml -f docker-compose.tls.yml config -q
       - name: Validate observability YAML/JSON
         run: |
           python -c "import yaml,glob,sys; [list(yaml.safe_load_all(open(f))) for f in glob.glob('observability/**/*.yml', recursive=True)]"
@@ -77,21 +79,32 @@ jobs:
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
             ./ "${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }}:~/conceptarena/"
 
-      - name: Rebuild and restart the backend stack
+      - name: Rebuild and restart the backend stack (behind Caddy TLS)
+        # D3: the api-gateway is no longer published on plain HTTP :8080 — the Caddy overlay
+        # (docker-compose.tls.yml) terminates TLS on :443 and reverse-proxies to it, so all traffic
+        # incl. /ws/ WebSocket upgrades is HTTPS/WSS. CADDY_SITE drives the Let's Encrypt cert;
+        # defaults to the IP's sslip.io hostname (no domain purchase needed). Override via the
+        # repo variable CADDY_SITE once a real domain exists.
+        env:
+          CADDY_SITE: ${{ vars.CADDY_SITE || '104-46-113-22.sslip.io' }}
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             "${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }}" \
-            'cd ~/conceptarena && docker compose -f docker-compose.backend.yml up -d --build --remove-orphans'
+            "cd ~/conceptarena && CADDY_SITE=$CADDY_SITE docker compose -f docker-compose.backend.yml -f docker-compose.tls.yml up -d --build --remove-orphans"
 
-      - name: Wait for the gateway to report healthy
+      - name: Wait for the gateway to report healthy (HTTPS)
+        # Hits the public HTTPS edge (Caddy), so this also proves the Let's Encrypt cert was issued.
+        # Requires NSG ports 80 (ACME challenge) and 443 open; 8080 no longer needs to be public.
+        env:
+          CADDY_SITE: ${{ vars.CADDY_SITE || '104-46-113-22.sslip.io' }}
         run: |
           for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "http://${{ secrets.AZURE_VM_HOST }}:8080/actuator/health" || true)
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://$CADDY_SITE/actuator/health" || true)
             if [ "$code" = "200" ]; then
-              echo "Gateway healthy after $((i * 10))s"
+              echo "Gateway healthy over HTTPS after $((i * 10))s"
               exit 0
             fi
             sleep 10
           done
-          echo "::error::Gateway did not report healthy within 5 minutes after deploy" >&2
+          echo "::error::Gateway did not report healthy over HTTPS within 5 minutes (check NSG allows 80+443 and CADDY_SITE resolves to the VM IP)" >&2
           exit 1
