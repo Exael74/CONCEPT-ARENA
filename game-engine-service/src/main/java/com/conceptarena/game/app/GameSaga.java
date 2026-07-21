@@ -90,7 +90,7 @@ public class GameSaga {
 
         if (state.getParticipants().size() >= 2 && state.getCurrentRound() == 0 && !state.isEnded()) {
             log.info("SAGA Starting first round for room {} with {} participants", roomId, state.getParticipants().size());
-            commandBus.dispatch(new StartRoundCommand(roomId, "system"));
+            commandBus.dispatch(new StartRoundCommand(roomId, StartRoundCommand.SYSTEM_TRIGGERED));
         }
     }
 
@@ -188,7 +188,7 @@ public class GameSaga {
             eventBus.publish(new GameEnded(state.getRoomId(), new HashMap<>(state.getScores())));
         } else {
             gameStateStore.save(state);
-            commandBus.dispatch(new StartRoundCommand(state.getRoomId(), "system"));
+            commandBus.dispatch(new StartRoundCommand(state.getRoomId(), StartRoundCommand.SYSTEM_TRIGGERED));
         }
     }
 

@@ -14,6 +14,7 @@ import com.conceptarena.game.app.readmodel.RoomReadModelPort.RoomSnapshot;
 import com.conceptarena.game.domain.Round;
 import com.conceptarena.game.domain.RoundStatus;
 import com.conceptarena.game.domain.command.StartRoundCommand;
+import com.conceptarena.game.domain.error.NotRoomOwnerException;
 import com.conceptarena.game.domain.event.RoundStarted;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,10 +45,10 @@ class StartRoundCommandHandlerTest {
 
     @Test
     void startsRoundWithConceptFromRoomsBankAndPublishesEvent() {
-        RoomSnapshot room = new RoomSnapshot("room-1", "bank-1", 4, false);
+        RoomSnapshot room = new RoomSnapshot("room-1", "creator-1", "bank-1", 4, false);
         when(roomReadModelPort.findByRoomId("room-1")).thenReturn(Optional.of(room));
         when(conceptBankReadModelPort.pickRandomConcept("bank-1"))
-            .thenReturn(new ConceptSnapshot("What is OOP?", "object oriented programming", 3));
+            .thenReturn(Optional.of(new ConceptSnapshot("What is OOP?", "object oriented programming", 3)));
 
         handler.handle(new StartRoundCommand("room-1", "system"));
 
@@ -73,12 +74,47 @@ class StartRoundCommandHandlerTest {
 
     @Test
     void rejectsWhenConceptBankHasNoConcepts() {
-        RoomSnapshot room = new RoomSnapshot("room-1", "bank-empty", 4, false);
+        RoomSnapshot room = new RoomSnapshot("room-1", "creator-1", "bank-empty", 4, false);
         when(roomReadModelPort.findByRoomId("room-1")).thenReturn(Optional.of(room));
         when(conceptBankReadModelPort.pickRandomConcept("bank-empty"))
-            .thenThrow(new IllegalStateException("ConceptBank has no concepts (or is unknown): bank-empty"));
+            .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler.handle(new StartRoundCommand("room-1", "system")))
             .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void ownerCanStartTheirOwnRoom() {
+        RoomSnapshot room = new RoomSnapshot("room-1", "creator-1", "bank-1", 4, false);
+        when(roomReadModelPort.findByRoomId("room-1")).thenReturn(Optional.of(room));
+        when(conceptBankReadModelPort.pickRandomConcept("bank-1"))
+            .thenReturn(Optional.of(new ConceptSnapshot("What is OOP?", "object oriented programming", 3)));
+
+        handler.handle(new StartRoundCommand("room-1", "creator-1"));
+
+        verify(roundRepository).save(any(Round.class));
+    }
+
+    @Test
+    void rejectsWhenNonCreatorTriesToStart() {
+        RoomSnapshot room = new RoomSnapshot("room-1", "creator-1", "bank-1", 4, false);
+        when(roomReadModelPort.findByRoomId("room-1")).thenReturn(Optional.of(room));
+
+        assertThatThrownBy(() -> handler.handle(new StartRoundCommand("room-1", "someone-else")))
+            .isInstanceOf(NotRoomOwnerException.class);
+        verify(roundRepository, org.mockito.Mockito.never()).save(any(Round.class));
+    }
+
+    @Test
+    void failsOpenWhenRoomHasNoRecordedCreator() {
+        // Legacy room read-model row predating the creatorUserId column — must not permanently lock everyone out.
+        RoomSnapshot room = new RoomSnapshot("room-1", null, "bank-1", 4, false);
+        when(roomReadModelPort.findByRoomId("room-1")).thenReturn(Optional.of(room));
+        when(conceptBankReadModelPort.pickRandomConcept("bank-1"))
+            .thenReturn(Optional.of(new ConceptSnapshot("What is OOP?", "object oriented programming", 3)));
+
+        handler.handle(new StartRoundCommand("room-1", "anyone"));
+
+        verify(roundRepository).save(any(Round.class));
     }
 }

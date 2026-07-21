@@ -1,4 +1,4 @@
-package com.conceptarena.room.app;
+﻿package com.conceptarena.room.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -33,7 +33,7 @@ class JoinRoomCommandHandlerTest {
 
     @Test
     void joinsRoomByIdAndPublishesEventAndReturnsRoomId() {
-        Room room = Room.create("Study Room", RoomType.PUBLIC, null, "bank-1", 4);
+        Room room = Room.create("Study Room", RoomType.PUBLIC, null, "creator-1", "bank-1", 4);
         when(roomRepository.findById(room.getId().value())).thenReturn(Optional.of(room));
 
         String joinedRoomId = handler.handle(new JoinRoomCommand(room.getId().value(), "user-1", null));
@@ -46,7 +46,7 @@ class JoinRoomCommandHandlerTest {
 
     @Test
     void joinsRoomByInviteCodeWhenNoRoomIdGivenAndReturnsRoomId() {
-        Room room = Room.create("Private Room", RoomType.PRIVATE, "ABC123", "bank-1", 4);
+        Room room = Room.create("Private Room", RoomType.PRIVATE, "ABC123", "creator-1", "bank-1", 4);
         when(roomRepository.findByInviteCode("ABC123")).thenReturn(Optional.of(room));
 
         String joinedRoomId = handler.handle(new JoinRoomCommand(null, "user-1", "ABC123"));
@@ -57,7 +57,7 @@ class JoinRoomCommandHandlerTest {
 
     @Test
     void rejectsJoiningPrivateRoomByIdWithoutItsInviteCode() {
-        Room room = Room.create("Private Room", RoomType.PRIVATE, "ABC123", "bank-1", 4);
+        Room room = Room.create("Private Room", RoomType.PRIVATE, "ABC123", "creator-1", "bank-1", 4);
         when(roomRepository.findById(room.getId().value())).thenReturn(Optional.of(room));
 
         assertThatThrownBy(() -> handler.handle(new JoinRoomCommand(room.getId().value(), "user-1", null)))
@@ -69,7 +69,7 @@ class JoinRoomCommandHandlerTest {
 
     @Test
     void rejectsJoiningRoomThatIsAlreadyInGame() {
-        Room room = Room.create("Study Room", RoomType.PUBLIC, null, "bank-1", 4);
+        Room room = Room.create("Study Room", RoomType.PUBLIC, null, "creator-1", "bank-1", 4);
         room.startGame();
         when(roomRepository.findById(room.getId().value())).thenReturn(Optional.of(room));
 

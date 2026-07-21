@@ -4,6 +4,7 @@ import com.conceptarena.game.app.GameSaga;
 import com.conceptarena.game.app.bus.CommandBus;
 import com.conceptarena.game.domain.command.StartRoundCommand;
 import com.conceptarena.game.domain.command.SubmitAnswerCommand;
+import com.conceptarena.game.domain.error.NotRoomOwnerException;
 import com.conceptarena.game.infra.ws.AnswerRateLimiter;
 import com.conceptarena.game.web.dto.ApiResponse;
 import java.security.Principal;
@@ -38,6 +39,8 @@ public class GameController {
         try {
             commandBus.dispatch(new StartRoundCommand(roomId, principal.getName()));
             return ResponseEntity.ok(ApiResponse.success("Round started", null));
+        } catch (NotRoomOwnerException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(e.getMessage()));
         } catch (IllegalArgumentException | IllegalStateException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }

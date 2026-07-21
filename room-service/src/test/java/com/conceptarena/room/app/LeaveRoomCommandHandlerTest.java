@@ -1,4 +1,4 @@
-package com.conceptarena.room.app;
+﻿package com.conceptarena.room.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,7 +34,7 @@ class LeaveRoomCommandHandlerTest {
 
     @Test
     void removesParticipantAndPublishesEvent() {
-        Room room = Room.create("Study Room", RoomType.PUBLIC, null, "bank-1", 4);
+        Room room = Room.create("Study Room", RoomType.PUBLIC, null, "creator-1", "bank-1", 4);
         room.addParticipant("user-1");
         room.addParticipant("user-2");
         when(roomRepository.findById(room.getId().value())).thenReturn(Optional.of(room));
@@ -49,7 +49,7 @@ class LeaveRoomCommandHandlerTest {
 
     @Test
     void finishesRoomWhenLastParticipantLeaves() {
-        Room room = Room.create("Study Room", RoomType.PUBLIC, null, "bank-1", 4);
+        Room room = Room.create("Study Room", RoomType.PUBLIC, null, "creator-1", "bank-1", 4);
         room.addParticipant("user-1");
         when(roomRepository.findById(room.getId().value())).thenReturn(Optional.of(room));
 

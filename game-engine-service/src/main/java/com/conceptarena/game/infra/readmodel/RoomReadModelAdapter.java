@@ -21,7 +21,7 @@ public class RoomReadModelAdapter implements RoomReadModelPort {
     @Transactional(readOnly = true)
     public Optional<RoomSnapshot> findByRoomId(String roomId) {
         return roomRepository.findById(roomId)
-            .map(e -> new RoomSnapshot(e.getRoomId(), e.getConceptBankId(), e.getMaxParticipants(), e.isGameStarted()));
+            .map(e -> new RoomSnapshot(e.getRoomId(), e.getCreatorUserId(), e.getConceptBankId(), e.getMaxParticipants(), e.isGameStarted()));
     }
 
     @Override

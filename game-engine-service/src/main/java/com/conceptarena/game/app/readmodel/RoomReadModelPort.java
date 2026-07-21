@@ -20,5 +20,5 @@ public interface RoomReadModelPort {
      */
     void markGameStarted(String roomId);
 
-    record RoomSnapshot(String roomId, String conceptBankId, int maxParticipants, boolean gameStarted) {}
+    record RoomSnapshot(String roomId, String creatorUserId, String conceptBankId, int maxParticipants, boolean gameStarted) {}
 }

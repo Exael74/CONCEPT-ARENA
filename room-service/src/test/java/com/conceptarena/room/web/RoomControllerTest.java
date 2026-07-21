@@ -1,4 +1,4 @@
-package com.conceptarena.room.web;
+﻿package com.conceptarena.room.web;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -46,7 +46,7 @@ class RoomControllerTest {
 
     @Test
     void listActiveRoomsReturnsOk() throws Exception {
-        Room room = Room.create("Study Room", RoomType.PUBLIC, null, "bank-1", 4);
+        Room room = Room.create("Study Room", RoomType.PUBLIC, null, "creator-1", "bank-1", 4);
         when(roomQueryService.getActiveRooms()).thenReturn(List.of(room));
 
         mockMvc.perform(get("/api/rooms"))
@@ -56,7 +56,7 @@ class RoomControllerTest {
 
     @Test
     void getRoomReturnsDetailWithoutInviteCode() throws Exception {
-        Room room = Room.create("Private Room", RoomType.PRIVATE, "SECRET", "bank-1", 4);
+        Room room = Room.create("Private Room", RoomType.PRIVATE, "SECRET", "creator-1", "bank-1", 4);
         room.addParticipant("user-1");
         when(roomRepository.findById(room.getId().value())).thenReturn(Optional.of(room));
 
@@ -81,7 +81,7 @@ class RoomControllerTest {
 
     @Test
     void createRoomReturnsCreatedWithRoomIdAndInviteCode() throws Exception {
-        Room room = Room.create("Study Room", RoomType.PRIVATE, "ABC123", "bank-1", 4);
+        Room room = Room.create("Study Room", RoomType.PRIVATE, "ABC123", "creator-1", "bank-1", 4);
         when(commandBus.dispatch(any())).thenReturn(room.getId().value());
         when(roomRepository.findById(room.getId().value())).thenReturn(Optional.of(room));
 

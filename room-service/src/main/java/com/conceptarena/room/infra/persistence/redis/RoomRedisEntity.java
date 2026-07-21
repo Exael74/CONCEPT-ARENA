@@ -24,6 +24,8 @@ public class RoomRedisEntity {
     @Indexed
     private String inviteCode;
 
+    private String creatorUserId;
+
     private String conceptBankId;
     private int maxParticipants;
 
@@ -40,6 +42,8 @@ public class RoomRedisEntity {
     public void setType(String type) { this.type = type; }
     public String getInviteCode() { return inviteCode; }
     public void setInviteCode(String inviteCode) { this.inviteCode = inviteCode; }
+    public String getCreatorUserId() { return creatorUserId; }
+    public void setCreatorUserId(String creatorUserId) { this.creatorUserId = creatorUserId; }
     public String getConceptBankId() { return conceptBankId; }
     public void setConceptBankId(String conceptBankId) { this.conceptBankId = conceptBankId; }
     public int getMaxParticipants() { return maxParticipants; }

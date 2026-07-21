@@ -67,16 +67,19 @@ public class RoomController {
             .toList();
         // inviteCode is intentionally omitted: exposing it here would let any
         // authenticated user bypass the "join by code" gate for private rooms.
-        return Map.of(
-            "id", room.getId().value(),
-            "name", room.getName(),
-            "type", room.getType().name(),
-            "status", room.getStatus().name(),
-            "conceptBankId", room.getConceptBankId(),
-            "maxParticipants", room.getMaxParticipants(),
-            "participantCount", room.getParticipantCount(),
-            "participants", participants
-        );
+        // HashMap (not Map.of): creatorUserId is null for rooms created before this field existed
+        // (no backfill possible for Redis-held state) — Map.of throws NPE on a null value.
+        Map<String, Object> detail = new java.util.HashMap<>();
+        detail.put("id", room.getId().value());
+        detail.put("name", room.getName());
+        detail.put("type", room.getType().name());
+        detail.put("status", room.getStatus().name());
+        detail.put("creatorUserId", room.getCreatorUserId());
+        detail.put("conceptBankId", room.getConceptBankId());
+        detail.put("maxParticipants", room.getMaxParticipants());
+        detail.put("participantCount", room.getParticipantCount());
+        detail.put("participants", participants);
+        return detail;
     }
 
     /**

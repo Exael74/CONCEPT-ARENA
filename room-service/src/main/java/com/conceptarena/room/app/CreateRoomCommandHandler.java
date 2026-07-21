@@ -31,6 +31,7 @@ public class CreateRoomCommandHandler implements CommandHandler<CreateRoomComman
             command.name(),
             command.type(),
             inviteCode,
+            command.userId(),
             command.conceptBankId(),
             command.maxParticipants()
         );

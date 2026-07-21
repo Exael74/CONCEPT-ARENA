@@ -71,6 +71,7 @@ public class RoomReadModelEventConsumer {
     public void handleRoomCreated(RoomCreatedMessage msg) {
         RoomReadModelEntity entity = roomRepository.findById(msg.roomId()).orElseGet(RoomReadModelEntity::new);
         entity.setRoomId(msg.roomId());
+        entity.setCreatorUserId(msg.creatorUserId());
         entity.setConceptBankId(msg.conceptBankId());
         entity.setMaxParticipants(msg.maxParticipants());
         roomRepository.save(entity);

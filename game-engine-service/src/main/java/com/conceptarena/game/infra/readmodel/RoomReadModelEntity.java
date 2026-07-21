@@ -17,6 +17,8 @@ public class RoomReadModelEntity {
     @Id
     private String roomId;
 
+    private String creatorUserId;
+
     private String conceptBankId;
 
     @Column(nullable = false)
@@ -27,6 +29,8 @@ public class RoomReadModelEntity {
 
     public String getRoomId() { return roomId; }
     public void setRoomId(String roomId) { this.roomId = roomId; }
+    public String getCreatorUserId() { return creatorUserId; }
+    public void setCreatorUserId(String creatorUserId) { this.creatorUserId = creatorUserId; }
     public String getConceptBankId() { return conceptBankId; }
     public void setConceptBankId(String conceptBankId) { this.conceptBankId = conceptBankId; }
     public int getMaxParticipants() { return maxParticipants; }

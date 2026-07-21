@@ -16,6 +16,7 @@ public class RoomRedisMapper {
         entity.setName(domain.getName());
         entity.setType(domain.getType().name());
         entity.setInviteCode(domain.getInviteCode());
+        entity.setCreatorUserId(domain.getCreatorUserId());
         entity.setConceptBankId(domain.getConceptBankId());
         entity.setMaxParticipants(domain.getMaxParticipants());
         entity.setStatus(domain.getStatus().name());
@@ -31,6 +32,7 @@ public class RoomRedisMapper {
             entity.getName(),
             RoomType.valueOf(entity.getType()),
             entity.getInviteCode(),
+            entity.getCreatorUserId(),
             entity.getConceptBankId(),
             entity.getMaxParticipants(),
             RoomStatus.valueOf(entity.getStatus())

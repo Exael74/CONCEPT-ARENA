@@ -8,6 +8,7 @@ import com.conceptarena.game.app.readmodel.RoomReadModelPort;
 import com.conceptarena.game.app.readmodel.RoomReadModelPort.RoomSnapshot;
 import com.conceptarena.game.domain.Round;
 import com.conceptarena.game.domain.command.StartRoundCommand;
+import com.conceptarena.game.domain.error.NotRoomOwnerException;
 import com.conceptarena.game.domain.event.RoundStarted;
 import java.time.Duration;
 import org.springframework.stereotype.Service;
@@ -39,10 +40,18 @@ public class StartRoundCommandHandler implements CommandHandler<StartRoundComman
     public Void handle(StartRoundCommand command) {
         RoomSnapshot room = roomReadModelPort.findByRoomId(command.roomId())
             .orElseThrow(() -> new IllegalArgumentException("Room not found: " + command.roomId()));
-        // Purely local bookkeeping — does NOT write back to room-service's Room.status (ADR-004).
-        roomReadModelPort.markGameStarted(command.roomId());
 
-        ConceptSnapshot concept = conceptBankReadModelPort.pickRandomConcept(room.conceptBankId());
+        // GameSaga's own auto-starts (2 players joined / next round) use SYSTEM_TRIGGERED and skip
+        // this check. A null creatorUserId means the room predates this field (no backfill possible
+        // for room-service's Redis-held state) — fails open rather than permanently locking it.
+        boolean isSystem = StartRoundCommand.SYSTEM_TRIGGERED.equals(command.triggeredByUserId());
+        if (!isSystem && room.creatorUserId() != null && !room.creatorUserId().equals(command.triggeredByUserId())) {
+            throw new NotRoomOwnerException(command.roomId());
+        }
+
+        ConceptSnapshot concept = conceptBankReadModelPort.pickRandomConcept(room.conceptBankId())
+            .orElseThrow(() -> new IllegalStateException(
+                "ConceptBank has no concepts (or is unknown): " + room.conceptBankId()));
 
         Round round = new Round(
             command.roomId(),
@@ -53,6 +62,10 @@ public class StartRoundCommandHandler implements CommandHandler<StartRoundComman
         );
         round.start();
         roundRepository.save(round);
+        // Only marked once the round actually exists — previously ran before the concept lookup,
+        // so a failed start (e.g. concept bank not yet populated) left gameStarted=true with no
+        // round ever created.
+        roomReadModelPort.markGameStarted(command.roomId());
 
         eventBus.publish(new RoundStarted(
             round.getId().value(), command.roomId(),
