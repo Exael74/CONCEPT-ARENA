@@ -182,8 +182,12 @@ services:
       <<: *java-mem
       SPRING_PROFILES_ACTIVE: docker
       REDIS_HOST: gateway-redis
-      # D2: allow the separately-run vite dev server origin by default (override for other origins).
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      # D2: wide open by default — this backend is a public class demo (players/classmates connect
+      # from whatever origin their frontend happens to be deployed/run at, unknown ahead of time).
+      # allowedOriginPatterns "*" (not allowedOrigins) is what lets this combine with
+      # allowCredentials=true. Tighten to the real frontend origin(s) once it's deployed, e.g.
+      # CORS_ORIGINS=https://myfrontend.vercel.app
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
     ports: [ "8080:8080" ]
     healthcheck:
       <<: *svc-health
