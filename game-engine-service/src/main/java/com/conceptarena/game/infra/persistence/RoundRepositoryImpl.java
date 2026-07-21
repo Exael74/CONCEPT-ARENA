@@ -40,7 +40,11 @@ public class RoundRepositoryImpl implements RoundRepository {
     @Override
     @Transactional(readOnly = true)
     public Optional<Round> findActiveRoundByRoomId(String roomId) {
-        return jpaRepository.findByRoomIdAndStatus(roomId, "ACTIVE").map(RoundMapper::toDomain);
+        // findFirst (not a single-result query): defensive against more than one ACTIVE row ever
+        // existing for a room — see the comment on findByRoomIdAndStatusOrderByStartedAtDesc.
+        return jpaRepository.findByRoomIdAndStatusOrderByStartedAtDesc(roomId, "ACTIVE").stream()
+            .findFirst()
+            .map(RoundMapper::toDomain);
     }
 
     @Override

@@ -33,6 +33,7 @@ public class RoundMapper {
         entity.setDifficulty(domain.getDifficulty());
         entity.setDurationSeconds(domain.getDuration().getSeconds());
         entity.setStatus(domain.getStatus().name());
+        entity.setVersion(domain.getVersion());
         if (domain.getStartedAt() != null) entity.setStartedAt(domain.getStartedAt());
         if (domain.getEndedAt() != null) entity.setEndedAt(domain.getEndedAt());
 
@@ -54,7 +55,8 @@ public class RoundMapper {
             Duration.ofSeconds(entity.getDurationSeconds()),
             RoundStatus.valueOf(entity.getStatus()),
             entity.getStartedAt(),
-            entity.getEndedAt()
+            entity.getEndedAt(),
+            entity.getVersion()
         );
         if (entity.getAnswers() != null) {
             entity.getAnswers().forEach(a -> {

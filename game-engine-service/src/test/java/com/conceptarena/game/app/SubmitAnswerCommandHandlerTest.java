@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 /** Rewritten (per ADR-004) to mock RoomReadModelPort.isParticipant instead of RoomRepository. */
 @ExtendWith(MockitoExtension.class)
@@ -105,6 +106,27 @@ class SubmitAnswerCommandHandlerTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("not a participant");
         verifyNoInteractions(roundRepository, answerValidationPort);
+    }
+
+    @Test
+    void rejectsCleanlyInsteadOf500WhenRoundWasConcurrentlyTransitioned() {
+        // Reproduces the production bug (2026-07-21): this Round was loaded here, but by save()
+        // time it had already been ended/transitioned by a concurrent early-end or timer expiry —
+        // the @Version bump on the now-ended row makes this save stale. Must surface as a clean
+        // 400-worthy rejection, not let the raw ObjectOptimisticLockingFailureException (previously
+        // an uncaught IncorrectResultSizeDataAccessException from two ACTIVE rows existing at once)
+        // reach GameController as a 500.
+        Round round = activeRound();
+        when(roomReadModelPort.isParticipant("room-1", "user-1")).thenReturn(true);
+        when(roundRepository.findActiveRoundByRoomId("room-1")).thenReturn(Optional.of(round));
+        when(answerValidationPort.isCorrect("polymorphism", "polymorphism")).thenReturn(true);
+        when(roundRepository.save(round)).thenThrow(new ObjectOptimisticLockingFailureException(Round.class, "round-1"));
+
+        assertThatThrownBy(() -> handler.handle(new SubmitAnswerCommand("room-1", "user-1", "polymorphism")))
+            .isInstanceOf(IllegalStateException.class);
+
+        verify(eventBus).publish(any(AnswerRejected.class));
+        verify(eventBus, org.mockito.Mockito.never()).publish(any(AnswerSubmitted.class));
     }
 
     @Test

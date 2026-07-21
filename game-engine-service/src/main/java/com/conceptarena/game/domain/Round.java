@@ -17,8 +17,13 @@ public class Round {
     private final Map<String, Answer> answers;
     private Instant startedAt;
     private Instant endedAt;
+    // Carries the JPA @Version this Round was loaded with, so a save() built from a stale copy
+    // (loaded before a concurrent request ended/transitioned this same round) is rejected instead
+    // of silently overwriting newer state — see RoundEntity#version. Null for a brand-new,
+    // not-yet-persisted round.
+    private final Long version;
 
-    private Round(EntityId id, String roomId, String conceptQuestion, String expectedAnswer, int difficulty, Duration duration, RoundStatus status, Instant startedAt, Instant endedAt) {
+    private Round(EntityId id, String roomId, String conceptQuestion, String expectedAnswer, int difficulty, Duration duration, RoundStatus status, Instant startedAt, Instant endedAt, Long version) {
         this.id = id;
         this.roomId = roomId;
         this.conceptQuestion = conceptQuestion;
@@ -29,14 +34,15 @@ public class Round {
         this.answers = new ConcurrentHashMap<>();
         this.startedAt = startedAt;
         this.endedAt = endedAt;
+        this.version = version;
     }
 
     public Round(String roomId, String conceptQuestion, String expectedAnswer, int difficulty, Duration duration) {
-        this(EntityId.generate(), roomId, conceptQuestion, expectedAnswer, difficulty, duration, RoundStatus.WAITING, null, null);
+        this(EntityId.generate(), roomId, conceptQuestion, expectedAnswer, difficulty, duration, RoundStatus.WAITING, null, null, null);
     }
 
-    public static Round restore(EntityId id, String roomId, String conceptQuestion, String expectedAnswer, int difficulty, Duration duration, RoundStatus status, Instant startedAt, Instant endedAt) {
-        return new Round(id, roomId, conceptQuestion, expectedAnswer, difficulty, duration, status, startedAt, endedAt);
+    public static Round restore(EntityId id, String roomId, String conceptQuestion, String expectedAnswer, int difficulty, Duration duration, RoundStatus status, Instant startedAt, Instant endedAt, Long version) {
+        return new Round(id, roomId, conceptQuestion, expectedAnswer, difficulty, duration, status, startedAt, endedAt, version);
     }
 
     public void restoreAnswer(String userId, String text, Instant submittedAt, Answer.AnswerResult result) {
@@ -95,4 +101,5 @@ public class Round {
     public Map<String, Answer> getAnswers() { return Collections.unmodifiableMap(answers); }
     public Instant getStartedAt() { return startedAt; }
     public Instant getEndedAt() { return endedAt; }
+    public Long getVersion() { return version; }
 }

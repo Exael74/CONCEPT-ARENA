@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -155,7 +156,7 @@ public class GameSaga {
         Map<String, String> results = new HashMap<>();
 
         if (round != null) {
-            round.end();
+            round = endAndSaveWithRetry(round, roundId);
             for (Map.Entry<String, Answer> entry : round.getAnswers().entrySet()) {
                 String userId = entry.getKey();
                 Answer answer = entry.getValue();
@@ -163,10 +164,27 @@ public class GameSaga {
                 scores.put(userId, score);
                 results.put(userId, answer.getResult().name());
             }
-            roundRepository.save(round);
         }
 
         eventBus.publish(new RoundEnded(roundId, roomId, scores, results));
+    }
+
+    /**
+     * A concurrent answer submission can save a newer version of this round between the load
+     * above and this save, making this save's version stale (see RoundEntity#version — added
+     * 2026-07-21 after this exact race left 2 rounds simultaneously ACTIVE for one room in
+     * production). Reload once and retry: end() is idempotent, and the reload picks up whichever
+     * answer raced in.
+     */
+    private Round endAndSaveWithRetry(Round round, String roundId) {
+        round.end();
+        try {
+            return roundRepository.save(round);
+        } catch (ObjectOptimisticLockingFailureException staleRound) {
+            Round fresh = roundRepository.findById(roundId).orElseThrow(() -> staleRound);
+            fresh.end();
+            return roundRepository.save(fresh);
+        }
     }
 
     private void onRoundEnded(RoundEnded event) {

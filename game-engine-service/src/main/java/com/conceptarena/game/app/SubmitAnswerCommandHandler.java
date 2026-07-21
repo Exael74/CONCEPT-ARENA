@@ -9,6 +9,7 @@ import com.conceptarena.game.domain.command.SubmitAnswerCommand;
 import com.conceptarena.game.domain.event.AnswerRejected;
 import com.conceptarena.game.domain.event.AnswerSubmitted;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -81,6 +82,16 @@ public class SubmitAnswerCommandHandler implements CommandHandler<SubmitAnswerCo
             // it as a clean duplicate rejection (400), not an unhandled 500 (audit gap #1).
             reject(command, "duplicate_answer");
             throw new IllegalStateException("User already answered", duplicate);
+        } catch (ObjectOptimisticLockingFailureException staleRound) {
+            // This Round was loaded, then concurrently ended/transitioned (early-end or timer
+            // expiry) by the time this save ran — the @Version bump means this save would otherwise
+            // silently resurrect an ended round back to ACTIVE (found in production 2026-07-21: left
+            // 2 rounds simultaneously ACTIVE for one room, crashing every subsequent lookup with
+            // IncorrectResultSizeDataAccessException — 500s on /answer, and could match an answer
+            // against the WRONG round's expectedAnswer). Surface as a clean rejection (400): the
+            // round moved on, so this submission no longer applies.
+            reject(command, "round_transitioned");
+            throw new IllegalStateException("Round ended before this answer was saved — try the current round", staleRound);
         }
 
         eventBus.publish(new AnswerSubmitted(

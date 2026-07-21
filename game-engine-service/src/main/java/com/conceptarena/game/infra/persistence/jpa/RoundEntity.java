@@ -30,6 +30,18 @@ public class RoundEntity {
     @Column(nullable = false)
     private String status;
 
+    // Prevents the lost-update race that let a stale in-memory Round (loaded before a concurrent
+    // request ended/transitioned this same round) blindly overwrite the row back to ACTIVE via a
+    // later save() — which left 2 rounds simultaneously ACTIVE for one room, crashing every
+    // subsequent findByRoomIdAndStatus lookup with IncorrectResultSizeDataAccessException (found in
+    // production 2026-07-21: POST /api/game/{roomId}/answer 500s, and — even when it didn't throw —
+    // could match a submitted answer against the WRONG round's expectedAnswer). Every save() now
+    // must carry the version it was loaded with; a stale one is rejected with
+    // ObjectOptimisticLockingFailureException instead of silently corrupting state — see
+    // SubmitAnswerCommandHandler's handling of that exception.
+    @Version
+    private Long version;
+
     private Instant startedAt;
     private Instant endedAt;
 
@@ -52,6 +64,8 @@ public class RoundEntity {
     public void setDurationSeconds(long durationSeconds) { this.durationSeconds = durationSeconds; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
     public Instant getStartedAt() { return startedAt; }
     public void setStartedAt(Instant startedAt) { this.startedAt = startedAt; }
     public Instant getEndedAt() { return endedAt; }

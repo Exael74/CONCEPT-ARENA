@@ -24,7 +24,7 @@ class ScoringServiceTest {
     void correctAnswerSubmittedImmediatelyGetsBaseScorePlusFullSpeedBonus() {
         Instant startedAt = Instant.parse("2026-01-01T00:00:00Z");
         Round round = Round.restore(EntityId.generate(), "room-1", "question", "answer", 2,
-            Duration.ofSeconds(10), RoundStatus.ACTIVE, startedAt, null);
+            Duration.ofSeconds(10), RoundStatus.ACTIVE, startedAt, null, 1L);
         round.restoreAnswer("user-1", "answer", startedAt, Answer.AnswerResult.CORRECT);
         Answer answer = round.getAnswers().get("user-1");
 
@@ -36,7 +36,7 @@ class ScoringServiceTest {
     void correctAnswerSubmittedAtDeadlineGetsOnlyBaseScore() {
         Instant startedAt = Instant.parse("2026-01-01T00:00:00Z");
         Round round = Round.restore(EntityId.generate(), "room-1", "question", "answer", 2,
-            Duration.ofSeconds(10), RoundStatus.ACTIVE, startedAt, null);
+            Duration.ofSeconds(10), RoundStatus.ACTIVE, startedAt, null, 1L);
         round.restoreAnswer("user-1", "answer", startedAt.plusSeconds(10), Answer.AnswerResult.CORRECT);
         Answer answer = round.getAnswers().get("user-1");
 
@@ -46,7 +46,7 @@ class ScoringServiceTest {
     @Test
     void correctAnswerWithNoRoundStartTimeGetsBaseScoreOnly() {
         Round round = Round.restore(EntityId.generate(), "room-1", "question", "answer", 4,
-            Duration.ofSeconds(15), RoundStatus.ACTIVE, null, null);
+            Duration.ofSeconds(15), RoundStatus.ACTIVE, null, null, 1L);
         round.restoreAnswer("user-1", "answer", Instant.now(), Answer.AnswerResult.CORRECT);
         Answer answer = round.getAnswers().get("user-1");
 
@@ -57,7 +57,7 @@ class ScoringServiceTest {
     void correctAnswerWithZeroDurationGetsBaseScoreOnly() {
         Instant startedAt = Instant.now();
         Round round = Round.restore(EntityId.generate(), "room-1", "question", "answer", 5,
-            Duration.ZERO, RoundStatus.ACTIVE, startedAt, null);
+            Duration.ZERO, RoundStatus.ACTIVE, startedAt, null, 1L);
         round.restoreAnswer("user-1", "answer", startedAt, Answer.AnswerResult.CORRECT);
         Answer answer = round.getAnswers().get("user-1");
 

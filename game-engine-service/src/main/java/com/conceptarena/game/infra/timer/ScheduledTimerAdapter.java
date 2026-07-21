@@ -75,7 +75,7 @@ public class ScheduledTimerAdapter implements TimerPort {
             Map<String, String> results = new HashMap<>();
 
             if (round != null) {
-                round.end();
+                round = endAndSaveWithRetry(round, event.getAggregateId());
                 for (Map.Entry<String, Answer> entry : round.getAnswers().entrySet()) {
                     String userId = entry.getKey();
                     Answer answer = entry.getValue();
@@ -83,7 +83,6 @@ public class ScheduledTimerAdapter implements TimerPort {
                     scores.put(userId, score);
                     results.put(userId, answer.getResult().name());
                 }
-                roundRepository.save(round);
                 log.info("TIMER Round {} ended for room {}. Computed {} scores.", round.getId().value(), event.getRoomId(), scores.size());
             } else {
                 log.warn("TIMER Round {} not found in DB when ending.", event.getAggregateId());
@@ -111,6 +110,24 @@ public class ScheduledTimerAdapter implements TimerPort {
         ScheduledFuture<?> tickFuture = tickTimers.remove(roomId);
         if (tickFuture != null) {
             tickFuture.cancel(false);
+        }
+    }
+
+    /**
+     * A concurrent answer submission can save a newer version of this round between the load
+     * above and this save, making this save's version stale (see RoundEntity#version — added
+     * 2026-07-21 after this exact race left 2 rounds simultaneously ACTIVE for one room in
+     * production). Reload once and retry: end() is idempotent, and the reload picks up whichever
+     * answer raced in.
+     */
+    private Round endAndSaveWithRetry(Round round, String roundId) {
+        round.end();
+        try {
+            return roundRepository.save(round);
+        } catch (org.springframework.orm.ObjectOptimisticLockingFailureException staleRound) {
+            Round fresh = roundRepository.findById(roundId).orElseThrow(() -> staleRound);
+            fresh.end();
+            return roundRepository.save(fresh);
         }
     }
 }
