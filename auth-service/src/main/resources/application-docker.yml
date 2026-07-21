@@ -4,9 +4,21 @@ spring:
       host: ${REDIS_HOST:auth-redis}
       port: ${REDIS_PORT:6379}
   mail:
-    # OTP email delivery via MailHog (dev SMTP catcher — view sent mail at http://localhost:8025).
+    # OTP email delivery. Defaults to MailHog (dev SMTP catcher — view sent mail at
+    # http://localhost:8025), which needs no auth/TLS. A real deployment overrides MAIL_HOST/PORT
+    # plus MAIL_USERNAME/MAIL_PASSWORD/MAIL_SMTP_AUTH/MAIL_SMTP_STARTTLS via .env on the host (never
+    # committed) to point at a real relay (e.g. Gmail SMTP: smtp.gmail.com:587, auth+starttls=true,
+    # username = the Gmail address, password = a 16-char app password, not the account password).
     host: ${MAIL_HOST:mailhog}
     port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:false}
   datasource:
     url: jdbc:postgresql://${AUTH_DB_HOST:auth-db}:${AUTH_DB_PORT:5432}/${AUTH_DB_NAME:auth}
     driver-class-name: org.postgresql.Driver

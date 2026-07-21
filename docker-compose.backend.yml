@@ -92,7 +92,15 @@ services:
       <<: *java-mem
       SPRING_PROFILES_ACTIVE: docker
       REDIS_HOST: auth-redis
-      MAIL_HOST: mailhog
+      # Defaults to the local MailHog catcher; set MAIL_* in .env (never committed) to use a real
+      # SMTP relay in production — see .env.example.
+      MAIL_HOST: ${MAIL_HOST:-mailhog}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-false}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@conceptarena.app}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
     ports: [ "127.0.0.1:8081:8081" ]
     healthcheck:
