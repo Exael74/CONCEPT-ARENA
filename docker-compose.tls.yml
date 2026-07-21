@@ -1,19 +1,20 @@
-# D3: HTTPS/WSS overlay. `docker-compose.yml` serves the SPA + proxies over plain HTTP, which is fine
-# behind a load balancer that terminates TLS but not for a directly-exposed public host. This overlay
-# adds a Caddy reverse proxy that terminates TLS (auto HTTPS) in front of the frontend, so all browser
-# traffic — including the /ws/ WebSocket upgrades (WSS) — is encrypted.
+# D3: HTTPS/WSS overlay for the BACKEND. `docker-compose.yml` exposes the api-gateway over plain
+# HTTP, which is fine behind a load balancer that terminates TLS but not for a directly-exposed
+# public host. This overlay adds a Caddy reverse proxy that terminates TLS (auto HTTPS) in front of
+# the api-gateway, so all traffic — including the /ws/ WebSocket upgrades (WSS) — is encrypted.
+# (The frontend is deployed separately and gets its own TLS from its host/CDN.)
 #
 # Usage:
 #   Local demo (self-signed, trusted via Caddy's local CA):
 #     docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
 #   Public host with a real domain (Caddy gets a Let's Encrypt cert automatically):
-#     CADDY_SITE=conceptarena.example.com docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+#     CADDY_SITE=api.conceptarena.example.com docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
 services:
   caddy:
     image: caddy:2
     restart: unless-stopped
     depends_on:
-      - frontend
+      - api-gateway
     environment:
       CADDY_SITE: ${CADDY_SITE:-localhost}
     ports:
@@ -24,8 +25,8 @@ services:
       - caddy-data:/data
       - caddy-config:/config
 
-  # The SPA/proxy no longer needs to publish :80 to the host — Caddy is the public edge now.
-  frontend:
+  # The gateway no longer needs to publish :8080 to the host — Caddy is the public edge now.
+  api-gateway:
     ports: !reset []
 
 volumes:

@@ -126,4 +126,38 @@
         </plugins>
     </build>
 
+    <profiles>
+        <profile>
+            <!-- Q1: static-style analysis (Checkstyle). Kept in a profile so normal builds are
+                 unaffected; run with `mvn -Pquality checkstyle:check` (or verify). Uses a focused
+                 ruleset (config/checkstyle.xml) targeting real issues (unused imports, empty blocks,
+                 equals/hashCode pairing, ...), not exhaustive whitespace nitpicks. -->
+            <id>quality</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-checkstyle-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <configuration>
+                            <configLocation>${maven.multiModuleProjectDirectory}/config/checkstyle.xml</configLocation>
+                            <consoleOutput>true</consoleOutput>
+                            <failOnViolation>false</failOnViolation>
+                            <includeTestSourceDirectory>false</includeTestSourceDirectory>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>checkstyle-verify</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>

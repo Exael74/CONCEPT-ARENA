@@ -1,3 +1,10 @@
+spring:
+  data:
+    redis:
+      # S2: backs the cross-replica signaling relay (Redis Pub/Sub).
+      host: ${VOICE_REDIS_HOST:voice-redis}
+      port: ${VOICE_REDIS_PORT:6379}
+
 logging:
   level:
     com.conceptarena: INFO
@@ -5,6 +12,10 @@ logging:
 app:
   jwt:
     secret: ${JWT_SECRET}   # required — no default, fails fast if unset
+  signaling:
+    relay:
+      # S2: enable cross-replica signaling fan-out via Redis Pub/Sub so voice works with 2+ replicas.
+      enabled: true
 
 # Distributed tracing (audit gap #7): report spans to Zipkin (only under the docker profile).
 management:

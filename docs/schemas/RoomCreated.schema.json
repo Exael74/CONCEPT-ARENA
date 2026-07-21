@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "conceptarena/RoomCreated",
+  "title": "RoomCreated",
+  "description": "Published by room-service (routing key room.room-created). Serialized from RoomCreatedPayload — inviteCode is deliberately omitted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["roomId", "name", "type", "creatorUserId", "conceptBankId", "maxParticipants"],
+  "properties": {
+    "roomId": { "type": "string" },
+    "name": { "type": "string" },
+    "type": { "type": "string", "enum": ["PUBLIC", "PRIVATE"] },
+    "creatorUserId": { "type": "string" },
+    "conceptBankId": { "type": "string" },
+    "maxParticipants": { "type": "integer", "minimum": 1 }
+  }
+}

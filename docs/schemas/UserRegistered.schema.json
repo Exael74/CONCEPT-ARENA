@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "conceptarena/UserRegistered",
+  "title": "UserRegistered",
+  "description": "Published by auth-service (routing key auth.user-registered). Whole-event serialization; email is a value object { value }. Retained on the auth.user-registered.audit queue for future consumers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "occurredOn", "aggregateId", "email"],
+  "properties": {
+    "eventId": { "type": "string" },
+    "occurredOn": { "type": "string", "format": "date-time" },
+    "aggregateId": { "type": "string", "description": "userId" },
+    "email": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value"],
+      "properties": { "value": { "type": "string", "format": "email" } }
+    }
+  }
+}

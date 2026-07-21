@@ -71,3 +71,12 @@ app:
     # D4: default 2h (was 24h). The token also rides WS-handshake URLs (see ADR-011), so keep the
     # default short-lived even when JWT_EXPIRATION_MS isn't overridden.
     expiration-ms: ${JWT_EXPIRATION_MS:7200000}
+  otp:
+    # Default in-memory store (dev/tests, no Redis). The docker profile switches to redis so codes
+    # are shared across replicas — see RedisOtpStore.
+    store: ${OTP_STORE:in-memory}
+  mail:
+    # Default off: LoggingEmailSender logs instead of sending, so dev/tests need no SMTP. The docker
+    # profile enables SMTP against MailHog — see SmtpEmailSender.
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:no-reply@conceptarena.app}

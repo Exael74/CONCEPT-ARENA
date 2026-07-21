@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "conceptarena/ConceptBankCreated",
+  "title": "ConceptBankCreated",
+  "description": "Published by concept-bank-service (routing key conceptbank.concept-bank-created), consumed by game-engine to build its concept read-model. Carries the full concept list.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "occurredOn", "aggregateId", "name", "subject", "concepts"],
+  "properties": {
+    "eventId": { "type": "string" },
+    "occurredOn": { "type": "string", "format": "date-time" },
+    "aggregateId": { "type": "string", "description": "conceptBankId" },
+    "name": { "type": "string" },
+    "subject": { "type": "string" },
+    "concepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question", "expectedAnswer", "difficulty"],
+        "properties": {
+          "question": { "type": "string" },
+          "expectedAnswer": { "type": "string" },
+          "difficulty": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

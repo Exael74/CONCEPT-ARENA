@@ -3,16 +3,26 @@
 # real infrastructure (see RoomReadModelEventConsumer's class comment). Hostnames/env var names
 # here match what each service's application-docker.yml already expected.
 #
-# Deployment hardening (same date, frontend integration phase):
-#  - `frontend` (nginx) is the single public entry point: serves the SPA and reverse-proxies
-#    /api + /ws to api-gateway, so browsers stay same-origin (no CORS) under a strict CSP.
+# This is the BACKEND stack (+ observability). The frontend is deployed separately (backend/front
+# split) and is NOT part of this file — the api-gateway (:8080) is the backend's public entry point,
+# and the SPA points at it via VITE_API_URL + the gateway's CORS_ORIGINS (see DEPLOY.md).
+# Deployment hardening:
 #  - restart policies on everything (a crashed JVM restarts instead of staying down).
-#  - TCP healthchecks on the Java services (the temurin JRE images ship no curl/wget;
-#    bash /dev/tcp probes the listening port without touching the image).
-#  - JAVA_TOOL_OPTIONS caps each JVM heap so the whole stack fits comfortably in ~4GB.
+#  - functional healthchecks on the Java services (GET /actuator/health, require 200 — O13);
+#    the temurin JRE images ship no curl/wget, so the check does the HTTP GET over bash /dev/tcp.
+#  - JAVA_TOOL_OPTIONS + deploy.resources.limits cap each JVM/container (D5).
 
 x-java-env: &java-mem
   JAVA_TOOL_OPTIONS: "-Xmx256m"
+
+# D5: container resource limits for the Java services (honored by `docker compose up`, unlike
+# deploy.replicas). 512M matches the -Xmx256m heap + JVM/metaspace/thread overhead; 1 CPU is a
+# sane per-service cap for local/staging so one service can't starve the host.
+x-java-limits: &java-limits
+  resources:
+    limits:
+      cpus: "1.0"
+      memory: 512M
 
 services:
   rabbitmq:
@@ -71,6 +81,24 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  voice-redis:
+    # S2: Redis Pub/Sub backing the cross-replica signaling relay (RedisSignalingRelay).
+    image: redis:7
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailhog:
+    # OTP email delivery target: a dev SMTP catcher. auth-service sends OTP mails here (SmtpEmailSender);
+    # view them in the web UI at http://localhost:8025. Not for production — swap for a real SMTP relay.
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"   # web UI (D1: localhost only)
 
   room-outbox-db:
     image: postgres:16
@@ -150,16 +178,19 @@ services:
       context: .
       dockerfile: auth-service/Dockerfile
     restart: unless-stopped
+    deploy: { <<: *java-limits }   # D5
     depends_on:
       auth-db: { condition: service_healthy }
       auth-redis: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+      mailhog: { condition: service_started }
     environment:
       <<: *java-mem
       SPRING_PROFILES_ACTIVE: docker
       AUTH_DB_HOST: auth-db
       REDIS_HOST: auth-redis
       RABBITMQ_HOST: rabbitmq
+      MAIL_HOST: mailhog
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
       # 2h instead of the 24h default: the token also rides WS-handshake URLs, keep it short-lived.
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-7200000}
@@ -179,6 +210,7 @@ services:
       context: .
       dockerfile: room-service/Dockerfile
     restart: unless-stopped
+    deploy: { <<: *java-limits }   # D5
     depends_on:
       room-outbox-db: { condition: service_healthy }
       room-redis: { condition: service_healthy }
@@ -204,6 +236,7 @@ services:
       context: .
       dockerfile: concept-bank-service/Dockerfile
     restart: unless-stopped
+    deploy: { <<: *java-limits }   # D5
     # S1: horizontal scaling is expressed in k8s/ (app-deployments.yaml: replicas + HPA), NOT here —
     # this Compose version honors `deploy.replicas` for `up`, and a service that publishes a fixed
     # host port can't run >1 replica (port clash). Compose stays single-instance per service; the
@@ -231,6 +264,7 @@ services:
       context: .
       dockerfile: game-engine-service/Dockerfile
     restart: unless-stopped
+    deploy: { <<: *java-limits }   # D5
     depends_on:
       game-db: { condition: service_healthy }
       game-redis: { condition: service_healthy }
@@ -257,9 +291,13 @@ services:
       context: .
       dockerfile: voice-signaling-service/Dockerfile
     restart: unless-stopped
+    deploy: { <<: *java-limits }   # D5
+    depends_on:
+      voice-redis: { condition: service_healthy }   # S2
     environment:
       <<: *java-mem
       SPRING_PROFILES_ACTIVE: docker
+      VOICE_REDIS_HOST: voice-redis
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
     ports:
       - "127.0.0.1:8085:8085"   # D1
@@ -277,6 +315,7 @@ services:
       context: .
       dockerfile: api-gateway/Dockerfile
     restart: unless-stopped
+    deploy: { <<: *java-limits }   # D5
     depends_on:
       auth-service: { condition: service_healthy }
       room-service: { condition: service_healthy }
@@ -297,18 +336,11 @@ services:
       retries: 12
       start_period: 40s
 
-  frontend:
-    # Single public entry point: static SPA + reverse proxy to api-gateway (same-origin, CSP).
-    build:
-      context: ./frontend
-    restart: unless-stopped
-    depends_on:
-      # D10: wait for the gateway to START, not to be fully HEALTHY. nginx can come up and return a
-      # brief 502 until the gateway is ready — that's fine, and it avoids blocking the whole frontend
-      # on the gateway's health (which itself waits on all backend services).
-      api-gateway: { condition: service_started }
-    ports:
-      - "80:80"
+  # NOTE: the frontend (nginx SPA) is intentionally NOT part of this compose — it is deployed
+  # separately (backend/frontend split). The api-gateway (:8080) is the public entry point for the
+  # backend; the SPA is built/served on its own and points at the gateway via VITE_API_URL + the
+  # gateway's CORS_ORIGINS (see DEPLOY.md, Modo C). The TLS overlay (docker-compose.tls.yml) fronts
+  # the gateway when serving the backend publicly.
 
   # ------------------------------------------------------------------------------------------------
   # Observability stack (audit gap #2 remediation): before this, the 6 services already exposed

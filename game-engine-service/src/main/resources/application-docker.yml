@@ -31,6 +31,10 @@ spring:
       simple:
         missing-queues-fatal: false
         observation-enabled: true
+        # S7: bound how long a consumer blocks waiting for a message, so a slow/stuck broker
+        # connection can't leave listener threads parked indefinitely. (The retry + no-requeue
+        # dead-letter policy is inherited from the base application.yml.)
+        receive-timeout: 30000
 
 # Distributed tracing (audit gap #7): report spans to Zipkin (only under the docker profile).
 management:

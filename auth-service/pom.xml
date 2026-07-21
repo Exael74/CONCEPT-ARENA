@@ -51,6 +51,12 @@
             <artifactId>spring-boot-starter-amqp</artifactId>
         </dependency>
         <dependency>
+            <!-- OTP email delivery (SmtpEmailSender). Only exercised under app.mail.enabled=true
+                 (docker profile → MailHog); the default LoggingEmailSender needs no SMTP. -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <dependency>
             <!-- Audit gap #2: shared-store (Redis) rate limiting so the per-IP auth cap holds across
                  replicas — see RedisAuthRateLimiter. Only active under app.rate-limiter.store=redis
                  (docker profile); the default in-memory limiter needs no Redis, so tests are unaffected. -->

@@ -13,3 +13,10 @@ datasources:
     type: loki
     access: proxy
     url: http://loki:3100
+  # O5: Zipkin datasource so distributed traces are viewable inside Grafana (not only Zipkin's own
+  # UI on :9411), and log/metric panels can pivot to the trace for a requestId.
+  - name: Zipkin
+    uid: zipkin
+    type: zipkin
+    access: proxy
+    url: http://zipkin:9411

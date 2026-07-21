@@ -55,6 +55,13 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
         <dependency>
+            <!-- S2: Redis Pub/Sub relay so signaling crosses replicas (a peer on replica A can reach
+                 a peer on replica B). Active only under the docker profile; the default/test profile
+                 stays single-instance and needs no Redis. See RedisSignalingRelay. -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
             <!-- O1: structured JSON logs (valid JSON with proper escaping, all MDC keys included). -->
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>

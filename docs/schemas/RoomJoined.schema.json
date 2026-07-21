@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "conceptarena/RoomJoined",
+  "title": "RoomJoined",
+  "description": "Published by room-service (routing key room.room-joined); RoomLeft (room.room-left) has the identical shape. Whole-event serialization. aggregateId is the roomId.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "occurredOn", "aggregateId", "userId"],
+  "properties": {
+    "eventId": { "type": "string" },
+    "occurredOn": { "type": "string", "format": "date-time" },
+    "aggregateId": { "type": "string", "description": "roomId" },
+    "userId": { "type": "string" }
+  }
+}

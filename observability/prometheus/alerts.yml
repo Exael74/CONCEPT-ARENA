@@ -75,6 +75,18 @@ groups:
           summary: "Queue lag on {{ $labels.queue }}"
           description: "Queue {{ $labels.queue }} has held more than 500 ready messages for 2m — a consumer is down or falling behind."
 
+      # O3: consumer stall — a consumer is connected but barely processing (utilisation < 50%),
+      # caught BEFORE the queue lag alert would (which only fires once >500 messages pile up).
+      # Only evaluated when the queue actually has a consumer attached, so an idle empty queue with
+      # no consumer doesn't false-alarm.
+      - alert: RabbitMQConsumerStall
+        expr: rabbitmq_queue_consumer_utilisation{queue=~"game-engine\\..*"} < 0.5 and rabbitmq_queue_consumers > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: "Consumer stall on {{ $labels.queue }}"
+          description: "{{ $labels.queue }} has a consumer attached but utilisation < 50% for 1m — the consumer is stuck/slow, not just idle."
+
   # Multi-window multi-burn-rate alerts against the 99.9% availability SLO (see docs/slos.md).
   # Error budget = 0.1%. Requiring two windows to agree suppresses flapping on a single spike.
   - name: conceptarena-slo-burn-rate

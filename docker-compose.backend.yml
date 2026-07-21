@@ -1,0 +1,190 @@
+# D3: Backend-only stack (no frontend, no observability) for fast backend dev / staging.
+#   docker compose -f docker-compose.backend.yml up -d --build
+# Brings up RabbitMQ (with the STOMP + prometheus plugins), the 4 Postgres, the 3 Redis, the 6
+# services and the gateway. Frontend runs separately (vite dev, `VITE_API_URL=http://localhost:8080`).
+# JWT_SECRET is required (see .env.example).
+
+x-java-env: &java-mem
+  JAVA_TOOL_OPTIONS: "-Xmx256m"
+
+x-java-limits: &java-limits
+  resources:
+    limits: { cpus: "1.0", memory: 512M }
+
+# Functional healthcheck (O13): GET /actuator/health, require 200. temurin JRE has no curl, so use
+# bash /dev/tcp. ` 200 ` matches both HTTP/1.0 (gateway/Netty) and HTTP/1.1 (Tomcat).
+x-health: &svc-health
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 40s
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+      - "61613:61613"   # STOMP relay backend (rabbitmq_stomp)
+    volumes:
+      - ./observability/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth-db:
+    image: postgres:16
+    command: ["postgres", "-c", "log_min_duration_statement=100"]
+    restart: unless-stopped
+    environment: { POSTGRES_DB: auth, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 5s, timeout: 5s, retries: 10 }
+
+  room-outbox-db:
+    image: postgres:16
+    command: ["postgres", "-c", "log_min_duration_statement=100"]
+    restart: unless-stopped
+    environment: { POSTGRES_DB: room_outbox, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 5s, timeout: 5s, retries: 10 }
+
+  conceptbank-db:
+    image: postgres:16
+    command: ["postgres", "-c", "log_min_duration_statement=100"]
+    restart: unless-stopped
+    environment: { POSTGRES_DB: conceptbank, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 5s, timeout: 5s, retries: 10 }
+
+  game-db:
+    image: postgres:16
+    command: ["postgres", "-c", "log_min_duration_statement=100"]
+    restart: unless-stopped
+    environment: { POSTGRES_DB: game, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 5s, timeout: 5s, retries: 10 }
+
+  auth-redis:    { image: redis:7, restart: unless-stopped, healthcheck: { test: ["CMD","redis-cli","ping"], interval: 5s, timeout: 5s, retries: 10 } }
+  gateway-redis: { image: redis:7, restart: unless-stopped, healthcheck: { test: ["CMD","redis-cli","ping"], interval: 5s, timeout: 5s, retries: 10 } }
+  game-redis:    { image: redis:7, restart: unless-stopped, healthcheck: { test: ["CMD","redis-cli","ping"], interval: 5s, timeout: 5s, retries: 10 } }
+  voice-redis:   { image: redis:7, restart: unless-stopped, healthcheck: { test: ["CMD","redis-cli","ping"], interval: 5s, timeout: 5s, retries: 10 } }
+
+  mailhog:
+    # OTP email catcher (dev). UI: http://localhost:8025
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports: [ "127.0.0.1:8025:8025" ]
+  room-redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    healthcheck: { test: ["CMD","redis-cli","ping"], interval: 5s, timeout: 5s, retries: 10 }
+
+  auth-service:
+    build: { context: ., dockerfile: auth-service/Dockerfile }
+    restart: unless-stopped
+    deploy: { <<: *java-limits }
+    depends_on:
+      auth-db: { condition: service_healthy }
+      auth-redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      mailhog: { condition: service_started }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      REDIS_HOST: auth-redis
+      MAIL_HOST: mailhog
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+    ports: [ "127.0.0.1:8081:8081" ]
+    healthcheck:
+      <<: *svc-health
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8081; printf 'GET /actuator/health HTTP/1.0\r\n\r\n' >&3; grep -q ' 200 ' <&3"]
+
+  room-service:
+    build: { context: ., dockerfile: room-service/Dockerfile }
+    restart: unless-stopped
+    deploy: { <<: *java-limits }
+    depends_on:
+      room-outbox-db: { condition: service_healthy }
+      room-redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      REDIS_HOST: room-redis
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+    ports: [ "127.0.0.1:8082:8082" ]
+    healthcheck:
+      <<: *svc-health
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8082; printf 'GET /actuator/health HTTP/1.0\r\n\r\n' >&3; grep -q ' 200 ' <&3"]
+
+  concept-bank-service:
+    build: { context: ., dockerfile: concept-bank-service/Dockerfile }
+    restart: unless-stopped
+    deploy: { <<: *java-limits }
+    depends_on:
+      conceptbank-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+    ports: [ "127.0.0.1:8084:8084" ]
+    healthcheck:
+      <<: *svc-health
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8084; printf 'GET /actuator/health HTTP/1.0\r\n\r\n' >&3; grep -q ' 200 ' <&3"]
+
+  game-engine-service:
+    build: { context: ., dockerfile: game-engine-service/Dockerfile }
+    restart: unless-stopped
+    deploy: { <<: *java-limits }
+    depends_on:
+      game-db: { condition: service_healthy }
+      game-redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      GAME_REDIS_HOST: game-redis
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+    ports: [ "127.0.0.1:8083:8083" ]
+    healthcheck:
+      <<: *svc-health
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8083; printf 'GET /actuator/health HTTP/1.0\r\n\r\n' >&3; grep -q ' 200 ' <&3"]
+
+  voice-signaling-service:
+    build: { context: ., dockerfile: voice-signaling-service/Dockerfile }
+    restart: unless-stopped
+    deploy: { <<: *java-limits }
+    depends_on:
+      voice-redis: { condition: service_healthy }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      VOICE_REDIS_HOST: voice-redis
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set — see .env.example}
+    ports: [ "127.0.0.1:8085:8085" ]
+    healthcheck:
+      <<: *svc-health
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8085; printf 'GET /actuator/health HTTP/1.0\r\n\r\n' >&3; grep -q ' 200 ' <&3"]
+
+  api-gateway:
+    build: { context: ., dockerfile: api-gateway/Dockerfile }
+    restart: unless-stopped
+    deploy: { <<: *java-limits }
+    depends_on:
+      auth-service: { condition: service_healthy }
+      room-service: { condition: service_healthy }
+      concept-bank-service: { condition: service_healthy }
+      game-engine-service: { condition: service_healthy }
+      voice-signaling-service: { condition: service_healthy }
+      gateway-redis: { condition: service_healthy }
+    environment:
+      <<: *java-mem
+      SPRING_PROFILES_ACTIVE: docker
+      REDIS_HOST: gateway-redis
+      # D2: allow the separately-run vite dev server origin by default (override for other origins).
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    ports: [ "8080:8080" ]
+    healthcheck:
+      <<: *svc-health
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080; printf 'GET /actuator/health HTTP/1.0\r\n\r\n' >&3; grep -q ' 200 ' <&3"]

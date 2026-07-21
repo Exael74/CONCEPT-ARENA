@@ -4,6 +4,7 @@ import com.conceptarena.voice.dto.SignalingMessage;
 import com.conceptarena.jwtlib.WsJwtHandshakeInterceptor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -24,17 +25,30 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 public class SignalingWebSocketHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(SignalingWebSocketHandler.class);
+    // A5: cap payload size. SDP offers/answers can be a few KB, so this is larger than the game
+    // handler's limit, but still bounded to stop memory-exhaustion via giant frames.
+    private static final int MAX_PAYLOAD_BYTES = 16384;
 
     private final SignalingPresenceRegistry presenceRegistry;
     private final ObjectMapper objectMapper;
+    // S2: present only under the docker profile (multi-replica). Optional so the default/test
+    // single-instance profile needs no Redis and the existing unit tests construct with empty.
+    private final Optional<RedisSignalingRelay> signalingRelay;
 
-    public SignalingWebSocketHandler(SignalingPresenceRegistry presenceRegistry, ObjectMapper objectMapper) {
+    public SignalingWebSocketHandler(SignalingPresenceRegistry presenceRegistry, ObjectMapper objectMapper,
+                                     Optional<RedisSignalingRelay> signalingRelay) {
         this.presenceRegistry = presenceRegistry;
         this.objectMapper = objectMapper;
+        this.signalingRelay = signalingRelay;
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        if (message.getPayloadLength() > MAX_PAYLOAD_BYTES) {   // A5
+            log.warn("Rejecting oversized signaling WS message from session {} ({} bytes)",
+                session.getId(), message.getPayloadLength());
+            return;
+        }
         String userId = (String) session.getAttributes().get(WsJwtHandshakeInterceptor.WS_USER_ID_ATTRIBUTE);
         if (userId == null) {
             log.warn("Rejecting signaling WS message from session {} with no authenticated userId", session.getId());
@@ -67,11 +81,19 @@ public class SignalingWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         WebSocketSession target = presenceRegistry.find(msg.roomId(), msg.toUserId());
-        if (target == null || !target.isOpen()) {
-            log.debug("Dropping {} signal for room {}: target user {} not connected", msg.type(), msg.roomId(), msg.toUserId());
+        if (target != null && target.isOpen()) {
+            // Target is connected to THIS replica — deliver directly.
+            String relayed = objectMapper.writeValueAsString(new SignalingMessage(msg.type(), msg.roomId(), null, fromUserId, msg.payload()));
+            target.sendMessage(new TextMessage(relayed));
             return;
         }
-        String relayed = objectMapper.writeValueAsString(new SignalingMessage(msg.type(), msg.roomId(), null, fromUserId, msg.payload()));
-        target.sendMessage(new TextMessage(relayed));
+        // S2: target isn't local. If the cross-replica relay is enabled (docker profile), publish it
+        // for whichever replica holds the target session; otherwise (single instance) drop it.
+        if (signalingRelay.isPresent()) {
+            signalingRelay.get().publish(new SignalingMessage(msg.type(), msg.roomId(), msg.toUserId(), fromUserId, msg.payload()));
+        } else {
+            log.debug("Dropping {} signal for room {}: target user {} not connected (no cross-replica relay)",
+                msg.type(), msg.roomId(), msg.toUserId());
+        }
     }
 }

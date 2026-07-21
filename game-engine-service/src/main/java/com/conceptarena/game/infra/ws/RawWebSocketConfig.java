@@ -14,10 +14,13 @@ public class RawWebSocketConfig implements WebSocketConfigurer {
 
     private final GameWebSocketHandler gameWebSocketHandler;
     private final JwtValidator jwtValidator;
+    private final WsConnectionRateLimitInterceptor connectionRateLimiter;
 
-    public RawWebSocketConfig(GameWebSocketHandler gameWebSocketHandler, JwtValidator jwtValidator) {
+    public RawWebSocketConfig(GameWebSocketHandler gameWebSocketHandler, JwtValidator jwtValidator,
+                              WsConnectionRateLimitInterceptor connectionRateLimiter) {
         this.gameWebSocketHandler = gameWebSocketHandler;
         this.jwtValidator = jwtValidator;
+        this.connectionRateLimiter = connectionRateLimiter;
     }
 
     @Bean
@@ -27,8 +30,9 @@ public class RawWebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        // A4: connection limiter runs before the JWT interceptor so it sheds excess handshakes early.
         registry.addHandler(gameWebSocketHandler, "/ws/game")
-            .addInterceptors(wsJwtHandshakeInterceptor())
+            .addInterceptors(connectionRateLimiter, wsJwtHandshakeInterceptor())
             .setAllowedOriginPatterns("*");
     }
 }

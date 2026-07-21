@@ -3,6 +3,10 @@ spring:
     redis:
       host: ${REDIS_HOST:auth-redis}
       port: ${REDIS_PORT:6379}
+  mail:
+    # OTP email delivery via MailHog (dev SMTP catcher — view sent mail at http://localhost:8025).
+    host: ${MAIL_HOST:mailhog}
+    port: ${MAIL_PORT:1025}
   datasource:
     url: jdbc:postgresql://${AUTH_DB_HOST:auth-db}:${AUTH_DB_PORT:5432}/${AUTH_DB_NAME:auth}
     driver-class-name: org.postgresql.Driver
@@ -53,3 +57,8 @@ app:
     # Audit gap #2: shared Redis sliding-window limiter so the 10/min auth cap holds across
     # replicas (in-memory by default, so unit tests need no Redis). See RedisAuthRateLimiter.
     store: redis
+  otp:
+    store: redis          # shared OTP codes across replicas (RedisOtpStore)
+  mail:
+    enabled: true         # real SMTP delivery via MailHog (SmtpEmailSender)
+    from: ${MAIL_FROM:no-reply@conceptarena.app}

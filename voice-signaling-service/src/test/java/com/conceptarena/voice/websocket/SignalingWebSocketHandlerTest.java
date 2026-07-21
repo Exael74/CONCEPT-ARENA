@@ -38,7 +38,8 @@ class SignalingWebSocketHandlerTest {
     @BeforeEach
     void setUp() {
         presenceRegistry = new SignalingPresenceRegistry();
-        handler = new SignalingWebSocketHandler(presenceRegistry, objectMapper);
+        // S2: no cross-replica relay in unit tests (single-instance) — pass Optional.empty().
+        handler = new SignalingWebSocketHandler(presenceRegistry, objectMapper, java.util.Optional.empty());
     }
 
     private void authenticateSessionAs(WebSocketSession session, String userId) {

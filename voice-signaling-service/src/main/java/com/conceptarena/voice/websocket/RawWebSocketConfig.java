@@ -14,10 +14,13 @@ public class RawWebSocketConfig implements WebSocketConfigurer {
 
     private final SignalingWebSocketHandler signalingWebSocketHandler;
     private final JwtValidator jwtValidator;
+    private final WsConnectionRateLimitInterceptor connectionRateLimiter;
 
-    public RawWebSocketConfig(SignalingWebSocketHandler signalingWebSocketHandler, JwtValidator jwtValidator) {
+    public RawWebSocketConfig(SignalingWebSocketHandler signalingWebSocketHandler, JwtValidator jwtValidator,
+                              WsConnectionRateLimitInterceptor connectionRateLimiter) {
         this.signalingWebSocketHandler = signalingWebSocketHandler;
         this.jwtValidator = jwtValidator;
+        this.connectionRateLimiter = connectionRateLimiter;
     }
 
     @Bean
@@ -27,8 +30,9 @@ public class RawWebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        // A4: connection limiter before JWT interceptor.
         registry.addHandler(signalingWebSocketHandler, "/ws/signaling")
-            .addInterceptors(wsJwtHandshakeInterceptor())
+            .addInterceptors(connectionRateLimiter, wsJwtHandshakeInterceptor())
             .setAllowedOriginPatterns("*");
     }
 }

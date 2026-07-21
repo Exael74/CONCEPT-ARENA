@@ -18,7 +18,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Component
 public class RateLimitingFilter extends OncePerRequestFilter {
 
-    private static final Set<String> LIMITED_PATHS = Set.of("/api/auth/login", "/api/auth/register");
+    // Include the OTP endpoints so codes can't be requested/brute-forced at high rate per IP (on top
+    // of the per-email attempt cap in OtpStore).
+    private static final Set<String> LIMITED_PATHS = Set.of(
+        "/api/auth/login", "/api/auth/register", "/api/auth/otp/request", "/api/auth/otp/verify");
 
     private final AuthRateLimiter rateLimiter;
 

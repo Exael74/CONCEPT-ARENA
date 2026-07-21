@@ -16,6 +16,9 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 public class GameWebSocketHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GameWebSocketHandler.class);
+    // A5: reject oversized frames before parsing. Answers are short (REST caps at 500 chars); 4KB is
+    // generous headroom while stopping a client from streaming a huge payload to exhaust memory.
+    private static final int MAX_PAYLOAD_BYTES = 4096;
     private final CommandBus commandBus;
     private final ObjectMapper objectMapper;
     private final AnswerRateLimiter rateLimiter;
@@ -28,6 +31,12 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        // A5: drop oversized payloads before doing any work with them.
+        if (message.getPayloadLength() > MAX_PAYLOAD_BYTES) {
+            log.warn("Rejecting oversized game WS message from session {} ({} bytes > {})",
+                session.getId(), message.getPayloadLength(), MAX_PAYLOAD_BYTES);
+            return;
+        }
         // The handshake (WsJwtHandshakeInterceptor) already authenticated this session and
         // stashed the real userId here — the client's own claimed userId in the payload,
         // if any, is never trusted for authorization decisions.

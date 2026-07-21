@@ -1,8 +1,8 @@
-# D3: Caddy terminates TLS and reverse-proxies to the frontend (nginx), which in turn proxies /api
-# and /ws to the api-gateway. WebSocket upgrades are proxied transparently, so /ws/ becomes WSS.
-# {$CADDY_SITE} is "localhost" by default (Caddy issues a locally-trusted cert) or a real domain
-# (Caddy fetches a Let's Encrypt cert automatically).
+# D3: Caddy terminates TLS and reverse-proxies to the api-gateway (the backend's public entry
+# point). WebSocket upgrades are proxied transparently, so /ws/ becomes WSS. {$CADDY_SITE} is
+# "localhost" by default (Caddy issues a locally-trusted cert) or a real domain (Caddy fetches a
+# Let's Encrypt cert automatically). The frontend is served separately (its own host/CDN).
 {$CADDY_SITE} {
 	encode gzip
-	reverse_proxy frontend:80
+	reverse_proxy api-gateway:8080
 }

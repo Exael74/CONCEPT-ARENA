@@ -54,12 +54,18 @@ spring:
         - AddResponseHeader=X-Frame-Options, DENY
         - AddResponseHeader=Referrer-Policy, no-referrer
         - AddResponseHeader=Permissions-Policy, geolocation=(), camera=(), microphone=(self)
+      # D2: CORS driven by CORS_ORIGINS so the SPA can live on a separate origin (CDN/Vercel) in the
+      # separated-deploy mode, not only same-origin behind nginx. allowedOriginPatterns (not
+      # allowedOrigins) is used deliberately: it is the one form Spring allows together with
+      # allowCredentials=true AND a "*" default — so local dev stays wildcard while production sets
+      # CORS_ORIGINS=https://app.example.com (comma-separated for multiple).
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOriginPatterns: "*"
+            allowedOriginPatterns: "${CORS_ORIGINS:*}"
             allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
             allowedHeaders: "*"
+            allowCredentials: true
 
 logging:
   level:
