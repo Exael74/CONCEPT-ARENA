@@ -20,8 +20,14 @@ public class User {
         this.registeredAt = registeredAt;
     }
 
+    /**
+     * A freshly registered account starts INACTIVE: it must be activated via email OTP
+     * verification (see VerifyOtpCommandHandler) before it can log in — LoginUserCommandHandler
+     * and authenticate() below both already gate on isActive(), so this single flag change is
+     * what turns OTP into "complete your registration" rather than an alternative login method.
+     */
     public static User register(Email email, PasswordHash passwordHash) {
-        return new User(EntityId.generate(), email, passwordHash, true, Instant.now());
+        return new User(EntityId.generate(), email, passwordHash, false, Instant.now());
     }
 
     public static User restore(EntityId id, Email email, PasswordHash passwordHash, boolean active, Instant registeredAt) {
@@ -34,6 +40,11 @@ public class User {
 
     public void deactivate() {
         this.active = false;
+    }
+
+    /** Marks the account active after a successful OTP email verification. */
+    public void activate() {
+        this.active = true;
     }
 
     public void changePassword(PasswordHash newPasswordHash) {

@@ -21,12 +21,18 @@ real broker).
 ## auth-service — exchange `conceptarena.auth.events`
 
 Source: `auth-service/src/main/java/com/conceptarena/auth/infra/messaging/outbox/OutboxWritingEventHandler.java`.
-No cross-service consumer exists today for either event.
+No cross-service consumer exists today for any of these events.
 
 | eventType | routing key | aggregateId | payload (JSON) |
 |---|---|---|---|
 | `UserRegistered` | `auth.user-registered` | userId | `{eventId, occurredOn, aggregateId, email: {value}}` |
 | `UserLoggedIn` | `auth.user-logged-in` | userId | `{eventId, occurredOn, aggregateId}` |
+| `UserVerified` | `auth.user-verified` | userId | `{eventId, occurredOn, aggregateId}` |
+
+`UserVerified` is published when a registrant completes OTP email verification and their account
+transitions from inactive to active (see `VerifyOtpCommandHandler`) — distinct from `UserLoggedIn`,
+which fires on every successful authentication (password or OTP), including the one that
+immediately follows verification.
 
 ## room-service — exchange `conceptarena.room.events`
 

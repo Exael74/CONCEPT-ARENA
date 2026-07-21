@@ -1,0 +1,82 @@
+@startuml 01-contenedores
+title ConceptArena — Diagrama de contenedores (C4 Nivel 2)
+skinparam shadowing false
+skinparam rectangle {
+  roundCorner 15
+}
+skinparam actorStyle awesome
+
+actor "Jugador" as Player
+actor "Desarrollador" as Dev
+
+rectangle "Frontend SPA\n(React / Vite)\n<<contenedor, desplegado aparte>>" as FE #E0ECFF
+
+rectangle "ConceptArena — Backend" {
+
+  rectangle "api-gateway\n<<Spring Cloud Gateway, reactivo>>\nCORS · rate limit global · X-Request-Id" as GW #3B82F6
+
+  rectangle "auth-service\n<<Spring Boot>>\nregistro · login · JWT · OTP" as AUTH #7C3AED
+  rectangle "room-service\n<<Spring Boot>>\nsalas · lobby · STOMP" as ROOM #7C3AED
+  rectangle "game-engine-service\n<<Spring Boot>>\nrondas · respuestas · ranking · anti-trampa" as GAME #7C3AED
+  rectangle "concept-bank-service\n<<Spring Boot>>\nbancos de conceptos" as BANK #7C3AED
+  rectangle "voice-signaling-service\n<<Spring Boot>>\nseñalización WebRTC" as VOICE #7C3AED
+
+  database "auth-db\nPostgreSQL" as AUTHDB
+  database "room-outbox-db\nPostgreSQL\n(solo tabla outbox)" as ROOMDB
+  database "game-db\nPostgreSQL" as GAMEDB
+  database "conceptbank-db\nPostgreSQL" as BANKDB
+
+  database "auth-redis\n(rate limit + OTP)" as AUTHREDIS
+  database "room-redis\n(estado de dominio, AOF)" as ROOMREDIS
+  database "game-redis\n(estado de partida,\nlocks, rate limit)" as GAMEREDIS
+  database "voice-redis\n(Pub/Sub señalización)" as VOICEREDIS
+  database "gateway-redis\n(rate limit global)" as GWREDIS
+
+  queue "RabbitMQ\n(exchanges por servicio,\nDLQ, colas de auditoría)" as MQ #10B981
+
+  rectangle "MailHog\n(SMTP dev — UI :8025)" as MAILHOG #EFEFEF
+}
+
+rectangle "GitHub Actions\n(CI: build+test, CD: deploy)" as CI #0F172A
+
+Player --> FE : usa el juego
+FE --> GW : HTTPS /api/**\nWSS /ws/**
+
+GW --> AUTH : /api/auth/**
+GW --> ROOM : /api/rooms/**\n/ws/lobby, /ws/room-stomp
+GW --> GAME : /api/game/**, /api/sessions/**\n/ws/game, /ws/game-stomp
+GW --> BANK : /api/concept-banks/**
+GW --> VOICE : /ws/signaling
+
+AUTH --> AUTHDB
+AUTH --> AUTHREDIS
+AUTH ..> MAILHOG : SMTP (código OTP)
+ROOM --> ROOMDB : outbox_event
+ROOM --> ROOMREDIS : Room / Participant
+GAME --> GAMEDB
+GAME --> GAMEREDIS
+BANK --> BANKDB
+VOICE --> VOICEREDIS
+GW --> GWREDIS
+
+AUTH ..> MQ : publica (outbox)\nUserRegistered, UserLoggedIn
+ROOM ..> MQ : publica/consume\nRoomCreated, RoomJoined, RoomLeft
+GAME ..> MQ : publica/consume\nRoundStarted, AnswerSubmitted,\nRoundEnded, GameEnded +\nread-models de Room/ConceptBank
+BANK ..> MQ : publica\nConceptBankCreated
+
+Dev --> CI : push a main
+CI --> GW : rsync + docker compose\nup -d --build (SSH)
+CI --> AUTH
+CI --> ROOM
+CI --> GAME
+CI --> BANK
+CI --> VOICE
+
+note bottom of MQ
+  Patrón Outbox en los 4 servicios con BD: la escritura de
+  estado y el registro del evento son atómicos (misma
+  transacción); un publicador programado drena la tabla
+  outbox hacia RabbitMQ.
+end note
+
+@enduml

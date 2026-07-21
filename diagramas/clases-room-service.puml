@@ -1,0 +1,188 @@
+@startuml clases-room-service
+title room-service — Diagrama de clases
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "kernel (externo)" #EFEFEF {
+  abstract class DomainEvent
+  interface "Command<T>" as Command
+  class EntityId
+}
+
+package "domain" {
+  class Room {
+    -id: EntityId
+    -name: String
+    -type: RoomType
+    -inviteCode: String
+    -conceptBankId: String
+    -maxParticipants: int
+    -status: RoomStatus
+    -participants: List<Participant>
+    +create(...): Room {static}
+    +addParticipant(String): Participant
+    +getParticipantCount(): int
+  }
+  class Participant {
+    -userId: String
+    -joinedAt: Instant
+    -microphoneEnabled: boolean
+  }
+  enum RoomType {
+    PUBLIC
+    PRIVATE
+  }
+  enum RoomStatus {
+    WAITING
+    IN_GAME
+    FINISHED
+  }
+
+  package "command" {
+    class CreateRoomCommand <<record>>
+    class JoinRoomCommand <<record>>
+    class LeaveRoomCommand <<record>>
+  }
+  package "event" {
+    class RoomCreated
+    class RoomJoined {
+      -userId: String
+    }
+    class RoomLeft {
+      -userId: String
+    }
+  }
+
+  Room "1" *-- "many" Participant
+  Room --> RoomType
+  Room --> RoomStatus
+  CreateRoomCommand ..|> Command
+  JoinRoomCommand ..|> Command
+  LeaveRoomCommand ..|> Command
+  RoomCreated --|> DomainEvent
+  RoomJoined --|> DomainEvent
+  RoomLeft --|> DomainEvent
+}
+
+package "app" {
+  interface CommandBus
+  interface "CommandHandler<C,R>" as CommandHandler
+  interface EventBus
+  interface RoomRepository {
+    +save(Room): Room
+    +findById(String): Optional<Room>
+  }
+  interface RoomQueryService {
+    +getActiveRooms(): List<Room>
+  }
+
+  class CreateRoomCommandHandler
+  class JoinRoomCommandHandler
+  class LeaveRoomCommandHandler
+
+  CreateRoomCommandHandler ..|> CommandHandler
+  JoinRoomCommandHandler ..|> CommandHandler
+  LeaveRoomCommandHandler ..|> CommandHandler
+  CreateRoomCommandHandler --> RoomRepository
+  CreateRoomCommandHandler --> EventBus
+  JoinRoomCommandHandler --> RoomRepository
+  JoinRoomCommandHandler --> EventBus
+  LeaveRoomCommandHandler --> RoomRepository
+  LeaveRoomCommandHandler --> EventBus
+}
+
+package "infra" {
+  package "persistence.redis" {
+    class RoomRedisEntity <<@RedisHash("room")>>
+    class ParticipantRedisEntity
+    class RoomRedisMapper
+    interface SpringDataRoomRedisRepository
+    class RedisRoomRepositoryImpl
+    class RedisRoomQueryServiceImpl
+
+    RedisRoomRepositoryImpl ..|> RoomRepository
+    RedisRoomQueryServiceImpl ..|> RoomQueryService
+    RedisRoomRepositoryImpl --> SpringDataRoomRedisRepository
+    RedisRoomRepositoryImpl --> RoomRedisMapper
+    RoomRedisEntity "1" *-- "many" ParticipantRedisEntity
+    note bottom of RoomRedisEntity
+      Estado de dominio 100% en Redis
+      (Room/Participant) — ver ADR-003.
+      JPA en este servicio existe SOLO
+      para la tabla outbox_event.
+    end note
+  }
+
+  package "ws" {
+    class RawWebSocketConfig <<WebSocketConfigurer>>
+    class RoomStompConfig <<WebSocketMessageBrokerConfigurer>>
+    class LobbyWebSocketHandler <<TextWebSocketHandler>>
+    class StompRoomNotificationAdapter
+
+    StompRoomNotificationAdapter ..> RoomJoined : escucha
+    StompRoomNotificationAdapter ..> RoomLeft : escucha
+    StompRoomNotificationAdapter --> "SimpMessagingTemplate" : publica /topic/rooms/{id}/participants
+    RoomStompConfig ..> "STOMP relay RabbitMQ" : perfil docker
+  }
+
+  package "web (rate limit)" {
+    interface RoomActionRateLimiter {
+      +allow(String): boolean
+    }
+    class InMemoryRoomActionRateLimiter
+    class RedisRoomActionRateLimiter
+    InMemoryRoomActionRateLimiter ..|> RoomActionRateLimiter
+    RedisRoomActionRateLimiter ..|> RoomActionRateLimiter
+  }
+
+  package "security" {
+    class SecurityConfig
+    class CorrelationIdFilter <<OncePerRequestFilter>>
+  }
+
+  package "messaging.outbox" {
+    class OutboxEvent <<@Entity>>
+    interface OutboxEventRepository
+    class OutboxEventPublisher
+    class OutboxWritingEventHandler
+    OutboxWritingEventHandler ..> RoomCreated : subscribe
+    OutboxWritingEventHandler ..> RoomJoined : subscribe
+    OutboxWritingEventHandler ..> RoomLeft : subscribe
+  }
+
+  package "bus" {
+    class InMemoryCommandBus
+    class InMemoryEventBus
+    InMemoryCommandBus ..|> CommandBus
+    InMemoryEventBus ..|> EventBus
+  }
+
+  package "config" {
+    class BusConfig
+    class JacksonConfig
+    class RedisConfig
+    class WebMvcConfig
+  }
+}
+
+package "web" {
+  class RoomController {
+    +listActiveRooms(): ApiResponse<List<Map>>
+    +getRoom(String): ApiResponse<Map>
+    +createRoom(...): ApiResponse<Map>
+    +joinRoom(String, Principal): ApiResponse<String>
+    +joinRoomByCode(String, Principal): ApiResponse<String>
+    +leaveRoom(String, Principal): ApiResponse<Void>
+  }
+  class GlobalExceptionHandler <<@RestControllerAdvice>>
+  class "ApiResponse<T>" as ApiResponse
+
+  RoomController --> CommandBus
+  RoomController --> RoomQueryService
+  RoomController --> RoomRepository
+  RoomController --> RoomActionRateLimiter
+}
+
+@enduml

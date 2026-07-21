@@ -1,0 +1,81 @@
+@startuml clases-voice-signaling-service
+title voice-signaling-service — Diagrama de clases
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+note as N0
+  Sin domain/app/infra separados a propósito (ADR-010):
+  es un relay de señalización WebRTC, sin modelo de
+  dominio ni persistencia — estructura más plana.
+end note
+
+package "dto" {
+  class SignalingMessage <<record>> {
+    +type: String
+    +roomId: String
+    +toUserId: String
+    +fromUserId: String
+    +payload: String
+  }
+  class "ApiResponse<T>" as ApiResponse
+}
+
+package "websocket" {
+  class SignalingPresenceRegistry {
+    -sessionsByRoom: Map<String,Map<String,WebSocketSession>>
+    +join(String, String, WebSocketSession)
+    +leave(String, String)
+    +leaveAll(WebSocketSession)
+    +find(String, String): WebSocketSession
+    +participantsOf(String): Set<String>
+  }
+
+  class SignalingWebSocketHandler <<TextWebSocketHandler>> {
+    +handleTextMessage(session, message)
+    -relay(SignalingMessage, String)
+  }
+
+  class RedisSignalingRelay <<MessageListener>> {
+    +publish(SignalingMessage)
+    +onMessage(Message, byte[])
+  }
+
+  class RawWebSocketConfig <<WebSocketConfigurer>>
+  class WsConnectionRateLimitInterceptor <<HandshakeInterceptor>>
+
+  SignalingWebSocketHandler --> SignalingPresenceRegistry
+  SignalingWebSocketHandler --> "Optional<RedisSignalingRelay>" : relay cross-réplica\n(perfil docker)
+  RedisSignalingRelay --> SignalingPresenceRegistry
+  RawWebSocketConfig --> SignalingWebSocketHandler
+  RawWebSocketConfig --> WsConnectionRateLimitInterceptor
+  RawWebSocketConfig ..> "JwtValidator (jwt-validation-lib)"
+
+  note bottom of RedisSignalingRelay
+    Redis Pub/Sub: la sesión WS es local a
+    la réplica; el MENSAJE se publica en un
+    canal y cada réplica entrega si tiene
+    al destinatario conectado.
+  end note
+}
+
+package "controller" {
+  class SignalingStatusController {
+    +participants(String): ApiResponse<Set<String>>
+  }
+  class GlobalExceptionHandler <<@RestControllerAdvice>>
+
+  SignalingStatusController --> SignalingPresenceRegistry
+}
+
+package "security" {
+  class SecurityConfig
+  class CorrelationIdFilter <<OncePerRequestFilter>>
+}
+
+package "config" {
+  class JacksonConfig
+}
+
+@enduml

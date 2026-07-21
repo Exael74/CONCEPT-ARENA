@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.conceptarena.auth.domain.Email;
 import com.conceptarena.auth.domain.event.UserLoggedIn;
 import com.conceptarena.auth.domain.event.UserRegistered;
+import com.conceptarena.auth.domain.event.UserVerified;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -35,6 +36,12 @@ class EventContractSerializationTest {
     @Test
     void userLoggedInMatchesDocumentedContract() throws Exception {
         JsonNode json = serialize(new UserLoggedIn("user-1"));
+        assertThat(fieldNames(json)).containsExactlyInAnyOrder("eventId", "occurredOn", "aggregateId");
+    }
+
+    @Test
+    void userVerifiedMatchesDocumentedContract() throws Exception {
+        JsonNode json = serialize(new UserVerified("user-1"));
         assertThat(fieldNames(json)).containsExactlyInAnyOrder("eventId", "occurredOn", "aggregateId");
     }
 

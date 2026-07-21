@@ -1,0 +1,36 @@
+@startuml 00-contexto
+title ConceptArena — Diagrama de contexto (C4 Nivel 1)
+skinparam shadowing false
+skinparam rectangle {
+  roundCorner 20
+}
+skinparam actorStyle awesome
+
+left to right direction
+
+actor "Jugador /\nEstudiante" as Player
+actor "Anfitrión de sala" as Host
+
+rectangle "ConceptArena" as System #3B82F6/7C3AED {
+  rectangle "Plataforma de trivia/estudio\ncolaborativo en tiempo real\n(salas, rondas, respuestas,\nranking, voz)" as SystemInner
+}
+
+rectangle "Servidor SMTP\n(MailHog en dev,\nSMTP real en prod)" as SMTP #EFEFEF
+rectangle "GitHub\n(repositorio + Actions)" as GitHub #EFEFEF
+actor "Desarrollador" as Dev
+
+Player --> System : juega, responde,\nvota en tiempo real\n(HTTPS + WSS, navegador)
+Host --> System : crea/administra salas,\nbancos de conceptos
+
+System --> SMTP : envía código OTP\n(login sin contraseña)
+
+Dev --> GitHub : push a main
+GitHub --> System : despliega automáticamente\n(GitHub Actions -> SSH -> VM Azure)
+
+note bottom of System
+  Backend: 6 microservicios Spring Boot detrás de un
+  API Gateway. Frontend (React/Vite) se despliega
+  por separado y consume el gateway por HTTP/WS.
+end note
+
+@enduml

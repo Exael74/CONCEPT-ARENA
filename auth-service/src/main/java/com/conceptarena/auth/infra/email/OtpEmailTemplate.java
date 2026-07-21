@@ -17,7 +17,7 @@ import org.springframework.util.StreamUtils;
 @Component
 public class OtpEmailTemplate {
 
-    public static final String SUBJECT = "Tu código de acceso a ConceptArena";
+    public static final String SUBJECT = "Confirma tu cuenta de ConceptArena";
 
     private final String template;
 

@@ -1,0 +1,112 @@
+@startuml clases-concept-bank-service
+title concept-bank-service — Diagrama de clases
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "kernel (externo)" #EFEFEF {
+  abstract class DomainEvent
+  interface "Command<T>" as Command
+  class EntityId
+}
+
+package "domain" {
+  class ConceptBank {
+    -id: EntityId
+    -name: String
+    -subject: String
+    -concepts: List<Concept>
+    +create(...): ConceptBank {static}
+  }
+  class Concept {
+    -question: String
+    -expectedAnswer: String
+    -difficulty: int
+  }
+  class CreateConceptBankCommand <<record>>
+  class ConceptBankCreated {
+    -name: String
+    -subject: String
+    -concepts: List<ConceptSnapshot>
+  }
+
+  ConceptBank "1" *-- "many" Concept
+  CreateConceptBankCommand ..|> Command
+  ConceptBankCreated --|> DomainEvent
+}
+
+package "app" {
+  interface CommandBus
+  interface EventBus
+  interface "CommandHandler<C,R>" as CommandHandler
+  interface ConceptBankRepository {
+    +save(ConceptBank): ConceptBank
+  }
+  interface ConceptBankQueryService {
+    +getById(String): Optional<ConceptBank>
+    +pickRandomConcept(String): Concept
+  }
+  class CreateConceptBankCommandHandler
+
+  CreateConceptBankCommandHandler ..|> CommandHandler
+  CreateConceptBankCommandHandler --> ConceptBankRepository
+  CreateConceptBankCommandHandler --> EventBus
+}
+
+package "infra" {
+  package "persistence" {
+    class ConceptBankRepositoryImpl
+    class ConceptBankQueryServiceImpl
+    class ConceptBankMapper
+    class ConceptBankEntity <<@Entity>>
+    class ConceptEntity <<@Entity>>
+    interface SpringDataConceptBankRepository
+
+    ConceptBankRepositoryImpl ..|> ConceptBankRepository
+    ConceptBankQueryServiceImpl ..|> ConceptBankQueryService
+    ConceptBankRepositoryImpl --> SpringDataConceptBankRepository
+    ConceptBankRepositoryImpl --> ConceptBankMapper
+    ConceptBankEntity "1" *-- "many" ConceptEntity
+  }
+
+  package "messaging.outbox" {
+    class OutboxEvent <<@Entity>>
+    interface OutboxEventRepository
+    class OutboxEventPublisher
+    class OutboxWritingEventHandler
+    OutboxWritingEventHandler ..> ConceptBankCreated : subscribe
+  }
+
+  package "bus" {
+    class InMemoryCommandBus
+    class InMemoryEventBus
+    InMemoryCommandBus ..|> CommandBus
+    InMemoryEventBus ..|> EventBus
+  }
+
+  package "security" {
+    class SecurityConfig
+    class CorrelationIdFilter <<OncePerRequestFilter>>
+  }
+
+  package "config" {
+    class BusConfig
+    class JacksonConfig
+    class WebMvcConfig
+  }
+}
+
+package "web" {
+  class ConceptBankController {
+    +create(...): ApiResponse<String>
+    +list(): ApiResponse<List>
+  }
+  class GlobalExceptionHandler <<@RestControllerAdvice>>
+  class "ApiResponse<T>" as ApiResponse
+
+  ConceptBankController --> CommandBus
+  ConceptBankController --> ConceptBankQueryService
+}
+
+@enduml

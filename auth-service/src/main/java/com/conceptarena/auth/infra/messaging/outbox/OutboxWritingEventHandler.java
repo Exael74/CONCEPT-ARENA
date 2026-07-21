@@ -4,6 +4,7 @@ import com.conceptarena.auth.app.bus.EventBus;
 import com.conceptarena.auth.app.bus.EventHandler;
 import com.conceptarena.auth.domain.event.UserLoggedIn;
 import com.conceptarena.auth.domain.event.UserRegistered;
+import com.conceptarena.auth.domain.event.UserVerified;
 import com.conceptarena.auth.infra.security.CorrelationIdFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -40,6 +41,7 @@ public class OutboxWritingEventHandler {
     public void subscribe() {
         eventBus.subscribe(UserRegistered.class, (EventHandler<UserRegistered>) this::onUserRegistered);
         eventBus.subscribe(UserLoggedIn.class, (EventHandler<UserLoggedIn>) this::onUserLoggedIn);
+        eventBus.subscribe(UserVerified.class, (EventHandler<UserVerified>) this::onUserVerified);
     }
 
     private void onUserRegistered(UserRegistered event) {
@@ -48,6 +50,10 @@ public class OutboxWritingEventHandler {
 
     private void onUserLoggedIn(UserLoggedIn event) {
         write(event.getAggregateId(), "UserLoggedIn", "auth.user-logged-in", event);
+    }
+
+    private void onUserVerified(UserVerified event) {
+        write(event.getAggregateId(), "UserVerified", "auth.user-verified", event);
     }
 
     private void write(String aggregateId, String eventType, String routingKey, Object payload) {

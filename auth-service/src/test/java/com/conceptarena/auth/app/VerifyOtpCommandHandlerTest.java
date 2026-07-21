@@ -13,11 +13,13 @@ import com.conceptarena.auth.domain.User;
 import com.conceptarena.auth.domain.command.VerifyOtpCommand;
 import com.conceptarena.auth.domain.error.InvalidOtpException;
 import com.conceptarena.auth.domain.event.UserLoggedIn;
+import com.conceptarena.auth.domain.event.UserVerified;
 import com.conceptarena.kernel.valueobject.PasswordHash;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -36,13 +38,14 @@ class VerifyOtpCommandHandlerTest {
         handler = new VerifyOtpCommandHandler(eventBus, userRepository, otpStore, tokenService);
     }
 
-    private User activeUser() {
+    /** A freshly-registered account: inactive until OTP verification (User.register()). */
+    private User unverifiedUser() {
         return User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromPlain("password123"));
     }
 
     @Test
-    void issuesTokenAndPublishesLoginOnValidCode() {
-        User user = activeUser();
+    void activatesAccountAndPublishesVerifiedAndLoginOnFirstValidCode() {
+        User user = unverifiedUser();
         when(otpStore.verifyAndConsume("student@escuelaing.edu.co", "123456")).thenReturn(OtpStore.VerifyResult.VALID);
         when(userRepository.findByEmail("student@escuelaing.edu.co")).thenReturn(Optional.of(user));
         when(tokenService.generateToken(user.getId().value())).thenReturn("jwt-token");
@@ -50,6 +53,27 @@ class VerifyOtpCommandHandlerTest {
         String token = handler.handle(new VerifyOtpCommand(new Email("student@escuelaing.edu.co"), "123456"));
 
         assertThat(token).isEqualTo("jwt-token");
+        assertThat(user.isActive()).isTrue();
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().isActive()).isTrue();
+        verify(eventBus).publish(any(UserVerified.class));
+        verify(eventBus).publish(any(UserLoggedIn.class));
+    }
+
+    @Test
+    void doesNotReactivateOrRepublishVerifiedWhenAlreadyActive() {
+        User user = unverifiedUser();
+        user.activate();
+        when(otpStore.verifyAndConsume("student@escuelaing.edu.co", "123456")).thenReturn(OtpStore.VerifyResult.VALID);
+        when(userRepository.findByEmail("student@escuelaing.edu.co")).thenReturn(Optional.of(user));
+        when(tokenService.generateToken(user.getId().value())).thenReturn("jwt-token");
+
+        String token = handler.handle(new VerifyOtpCommand(new Email("student@escuelaing.edu.co"), "123456"));
+
+        assertThat(token).isEqualTo("jwt-token");
+        verify(userRepository, never()).save(any(User.class));
+        verify(eventBus, never()).publish(any(UserVerified.class));
         verify(eventBus).publish(any(UserLoggedIn.class));
     }
 
@@ -66,11 +90,9 @@ class VerifyOtpCommandHandlerTest {
     }
 
     @Test
-    void rejectsWhenAccountWasDeactivatedBetweenRequestAndVerify() {
-        User user = activeUser();
-        user.deactivate();
+    void rejectsWhenUserRecordIsMissingDespiteAValidCode() {
         when(otpStore.verifyAndConsume("student@escuelaing.edu.co", "123456")).thenReturn(OtpStore.VerifyResult.VALID);
-        when(userRepository.findByEmail("student@escuelaing.edu.co")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmail("student@escuelaing.edu.co")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler.handle(new VerifyOtpCommand(new Email("student@escuelaing.edu.co"), "123456")))
             .isInstanceOf(InvalidOtpException.class);

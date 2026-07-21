@@ -12,13 +12,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Passwordless OTP login (additive — the password flow in UserController is unchanged):
- *   POST /api/auth/otp/request  { "email": "..." }            -> emails a 6-digit code
- *   POST /api/auth/otp/verify   { "email": "...", "code": "" } -> returns a JWT on success
+ * Email verification (account activation), not an alternative login: registration creates an
+ * INACTIVE account, and verify is what activates it (and, since the user is now proven to own the
+ * email, also returns a JWT so the client doesn't need a separate login call right after).
+ *   POST /api/auth/otp/request  { "email": "..." }            -> (re)sends a 6-digit code
+ *   POST /api/auth/otp/verify   { "email": "...", "code": "" } -> activates the account, returns a JWT
  *
- * request always returns 200 with the same body whether or not the email is registered
- * (anti-enumeration); verify returns 401 for any wrong/expired/exhausted code. Both paths are
- * IP-rate-limited (RateLimitingFilter).
+ * request always returns 200 with the same body whether the email is unregistered or already
+ * verified (anti-enumeration) — see RequestOtpCommandHandler. verify returns 401 for any
+ * wrong/expired/exhausted code. Both paths are IP-rate-limited (RateLimitingFilter).
  */
 @RestController
 @RequestMapping("/api/auth/otp")
@@ -50,7 +52,7 @@ public class OtpController {
         }
         try {
             String token = commandBus.dispatch(new VerifyOtpCommand(new Email(body.email()), body.code().trim()));
-            return ResponseEntity.ok(ApiResponse.success("Login successful — use token as Bearer", token));
+            return ResponseEntity.ok(ApiResponse.success("Account verified — use token as Bearer", token));
         } catch (InvalidOtpException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error(e.getMessage()));
         } catch (DomainException e) {

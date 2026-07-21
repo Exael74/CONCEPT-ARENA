@@ -48,4 +48,21 @@ public class RabbitTopologyConfig {
         return BindingBuilder.bind(userRegisteredAuditQueue).to(authEventsExchange)
             .with("auth.user-registered").noargs();
     }
+
+    /** Same rationale as userRegisteredAuditQueue: retains UserVerified (account-activation) events. */
+    @Bean
+    public Queue userVerifiedAuditQueue() {
+        return QueueBuilder.durable("auth.user-verified.audit")
+            .withArguments(Map.of(
+                "x-message-ttl", 86_400_000,
+                "x-max-length", 100_000,
+                "x-overflow", "drop-head"))
+            .build();
+    }
+
+    @Bean
+    public Binding userVerifiedAuditBinding(Queue userVerifiedAuditQueue, Exchange authEventsExchange) {
+        return BindingBuilder.bind(userVerifiedAuditQueue).to(authEventsExchange)
+            .with("auth.user-verified").noargs();
+    }
 }

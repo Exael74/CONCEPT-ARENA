@@ -1,0 +1,54 @@
+@startuml clases-api-gateway
+title api-gateway — Diagrama de clases
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+note as N0
+  Spring Cloud Gateway (WebFlux/reactivo) — a diferencia de
+  los demás servicios (Spring MVC/servlet). Sin dominio propio:
+  enruta HTTP/WS y aplica cross-cutting concerns.
+  Las rutas están declaradas en application.yml, no en código.
+end note
+
+class ApiGatewayApplication <<@SpringBootApplication>>
+
+class CorrelationIdGlobalFilter <<GlobalFilter, Ordered>> {
+  +HEADER: String {static} = "X-Request-Id"
+  +filter(exchange, chain): Mono<Void>
+  +getOrder(): int
+}
+note right of CorrelationIdGlobalFilter
+  Origina/propaga X-Request-Id en el punto
+  de entrada del sistema (equivalente reactivo
+  del CorrelationIdFilter servlet de los otros
+  5 servicios).
+end note
+
+class GatewayRateLimiterConfig <<@Configuration, @Profile("docker")>> {
+  +ipKeyResolver(): KeyResolver <<@Bean>>
+}
+note right of GatewayRateLimiterConfig
+  Alimenta el filtro RequestRateLimiter
+  (RedisRateLimiter) declarado en YAML:
+  100 req/s por IP, burst 200.
+end note
+
+package "Rutas declaradas en application*.yml" {
+  class "Route: auth-service" as R1
+  class "Route: room-service-rest / -ws / -stomp" as R2
+  class "Route: concept-bank-service" as R3
+  class "Route: game-engine-service-rest / -ws / -stomp" as R4
+  class "Route: voice-signaling-service-ws" as R5
+}
+
+ApiGatewayApplication ..> CorrelationIdGlobalFilter : registra
+ApiGatewayApplication ..> GatewayRateLimiterConfig : registra
+ApiGatewayApplication ..> R1
+ApiGatewayApplication ..> R2
+ApiGatewayApplication ..> R3
+ApiGatewayApplication ..> R4
+ApiGatewayApplication ..> R5
+
+@enduml

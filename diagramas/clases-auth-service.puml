@@ -1,0 +1,227 @@
+@startuml clases-auth-service
+title auth-service — Diagrama de clases
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "kernel (externo)" #EFEFEF {
+  abstract class DomainEvent
+  class DomainException
+  interface "Command<T>" as Command
+  abstract class BaseEntity
+  class EntityId
+  class PasswordHash
+}
+
+package "domain" {
+  class User {
+    -id: EntityId
+    -email: Email
+    -passwordHash: PasswordHash
+    -active: boolean
+    -registeredAt: Instant
+    +register(Email, PasswordHash): User {static}
+    +restore(...): User {static}
+    +authenticate(PasswordHash, PasswordVerifier): boolean
+    +deactivate()
+    +changePassword(PasswordHash)
+  }
+
+  class Email <<record>> {
+    +value: String
+  }
+
+  package "command" {
+    class RegisterUserCommand <<record>>
+    class LoginUserCommand <<record>>
+    class RequestOtpCommand <<record>>
+    class VerifyOtpCommand <<record>>
+  }
+
+  package "event" {
+    class UserRegistered {
+      -email: Email
+    }
+    class UserLoggedIn
+  }
+
+  package "error" {
+    class DuplicateEmailException
+    class InvalidCredentialsException
+    class InvalidOtpException
+  }
+
+  User --> Email
+  User ..> PasswordHash
+  RegisterUserCommand ..|> Command
+  LoginUserCommand ..|> Command
+  RequestOtpCommand ..|> Command
+  VerifyOtpCommand ..|> Command
+  UserRegistered --|> DomainEvent
+  UserLoggedIn --|> DomainEvent
+  DuplicateEmailException --|> DomainException
+  InvalidCredentialsException --|> DomainException
+  InvalidOtpException --|> DomainException
+}
+
+package "app" {
+  interface CommandBus {
+    +dispatch(Command<T>): T
+  }
+  interface "CommandHandler<C,R>" as CommandHandler {
+    +handle(C): R
+  }
+  interface EventBus {
+    +publish(DomainEvent)
+    +subscribe(Class, EventHandler)
+  }
+  interface UserRepository {
+    +save(User): User
+    +findByEmail(String): Optional<User>
+    +existsByEmail(String): boolean
+    +findById(String): Optional<User>
+  }
+  interface TokenService {
+    +generateToken(String): String
+    +validateAndGetUserId(String): Optional<String>
+  }
+  interface OtpStore {
+    +TTL: Duration {static}
+    +MAX_ATTEMPTS: int {static}
+    +store(String, String)
+    +verifyAndConsume(String, String): VerifyResult
+  }
+  enum "OtpStore.VerifyResult" as VerifyResult {
+    VALID
+    INVALID
+    EXPIRED
+    TOO_MANY_ATTEMPTS
+  }
+  interface EmailSender {
+    +sendOtpEmail(String, String, Duration)
+  }
+
+  class RegisterUserCommandHandler
+  class LoginUserCommandHandler
+  class RequestOtpCommandHandler
+  class VerifyOtpCommandHandler
+
+  RegisterUserCommandHandler ..|> CommandHandler
+  LoginUserCommandHandler ..|> CommandHandler
+  RequestOtpCommandHandler ..|> CommandHandler
+  VerifyOtpCommandHandler ..|> CommandHandler
+
+  RegisterUserCommandHandler --> UserRepository
+  RegisterUserCommandHandler --> EventBus
+  LoginUserCommandHandler --> UserRepository
+  LoginUserCommandHandler --> TokenService
+  LoginUserCommandHandler --> EventBus
+  RequestOtpCommandHandler --> UserRepository
+  RequestOtpCommandHandler --> OtpStore
+  RequestOtpCommandHandler --> EmailSender
+  VerifyOtpCommandHandler --> UserRepository
+  VerifyOtpCommandHandler --> OtpStore
+  VerifyOtpCommandHandler --> TokenService
+  VerifyOtpCommandHandler --> EventBus
+  OtpStore +-- VerifyResult
+}
+
+package "infra" {
+  package "persistence" {
+    class UserRepositoryImpl
+    class UserMapper
+    class UserEntity <<@Entity>>
+    interface SpringDataUserRepository
+    UserRepositoryImpl ..|> UserRepository
+    UserRepositoryImpl --> SpringDataUserRepository
+    UserRepositoryImpl --> UserMapper
+    SpringDataUserRepository --> UserEntity
+  }
+
+  package "security" {
+    class JwtTokenService
+    class SecurityConfig
+    class RateLimitingFilter <<OncePerRequestFilter>>
+    class CorrelationIdFilter <<OncePerRequestFilter>>
+    interface AuthRateLimiter {
+      +allow(String): boolean
+    }
+    class InMemoryAuthRateLimiter
+    class RedisAuthRateLimiter
+
+    JwtTokenService ..|> TokenService
+    RateLimitingFilter --> AuthRateLimiter
+    InMemoryAuthRateLimiter ..|> AuthRateLimiter
+    RedisAuthRateLimiter ..|> AuthRateLimiter
+  }
+
+  package "otp" {
+    class InMemoryOtpStore
+    class RedisOtpStore
+    InMemoryOtpStore ..|> OtpStore
+    RedisOtpStore ..|> OtpStore
+  }
+
+  package "email" {
+    class OtpEmailTemplate {
+      +SUBJECT: String {static}
+      +render(String, Duration): String
+    }
+    class LoggingEmailSender
+    class SmtpEmailSender
+    LoggingEmailSender ..|> EmailSender
+    SmtpEmailSender ..|> EmailSender
+    SmtpEmailSender --> OtpEmailTemplate
+  }
+
+  package "messaging.outbox" {
+    class OutboxEvent <<@Entity>>
+    interface OutboxEventRepository
+    class OutboxEventPublisher {
+      +publishPending() <<@Scheduled>>
+    }
+    class OutboxWritingEventHandler
+
+    OutboxEventPublisher --> OutboxEventRepository
+    OutboxWritingEventHandler --> EventBus
+    OutboxWritingEventHandler --> OutboxEventRepository
+    OutboxWritingEventHandler ..> UserRegistered : subscribe
+    OutboxWritingEventHandler ..> UserLoggedIn : subscribe
+  }
+
+  package "bus" {
+    class InMemoryCommandBus
+    class InMemoryEventBus
+    InMemoryCommandBus ..|> CommandBus
+    InMemoryEventBus ..|> EventBus
+  }
+
+  package "config" {
+    class BusConfig
+    class JacksonConfig
+    class WebMvcConfig
+  }
+}
+
+package "web" {
+  class UserController {
+    +register(RegisterUserRequest): ApiResponse<String>
+    +login(LoginUserRequest): ApiResponse<String>
+  }
+  class OtpController {
+    +request(RequestOtpRequest): ApiResponse<Void>
+    +verify(VerifyOtpRequest): ApiResponse<String>
+  }
+  class GlobalExceptionHandler <<@RestControllerAdvice>>
+  class "ApiResponse<T>" as ApiResponse
+
+  UserController --> CommandBus
+  OtpController --> CommandBus
+}
+
+note right of OtpStore
+  2 implementaciones (mismo patrón en\ntodo el proyecto): InMemory (default,\ndev/tests) y Redis (perfil docker,\ncompartido entre réplicas).
+end note
+
+@enduml

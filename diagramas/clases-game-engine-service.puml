@@ -1,0 +1,335 @@
+@startuml clases-game-engine-service
+title game-engine-service — Diagrama de clases
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+package "kernel (externo)" #EFEFEF {
+  abstract class DomainEvent
+  interface "Command<T>" as Command
+  class EntityId
+}
+
+package "domain" {
+  class Round {
+    -id: EntityId
+    -roomId: String
+    -conceptQuestion: String
+    -expectedAnswer: String
+    -difficulty: int
+    -duration: Duration
+    -status: RoundStatus
+    -answers: Map<String,Answer>
+    -startedAt: Instant
+    -endedAt: Instant
+    +start()
+    +submitAnswer(String, String)
+    +end()
+    +allAnswered(List<String>): boolean
+  }
+  class Answer {
+    -userId: String
+    -text: String
+    -submittedAt: Instant
+    -result: AnswerResult
+    +markCorrect()
+    +markIncorrect()
+    +markTimeout()
+  }
+  enum RoundStatus {
+    WAITING
+    ACTIVE
+    ENDED
+  }
+  enum AnswerResult {
+    PENDING
+    CORRECT
+    INCORRECT
+    TIMEOUT
+  }
+  class ScoringService <<utility>> {
+    +calculateScore(Round, Answer): int {static}
+  }
+
+  package "command" {
+    class StartRoundCommand <<record>>
+    class SubmitAnswerCommand <<record>>
+  }
+  package "event" {
+    class RoundStarted
+    class AnswerSubmitted
+    class AnswerRejected
+    class RoundEnded
+    class GameEnded {
+      -finalScores: Map<String,Integer>
+    }
+    class RoomJoined <<local mirror>>
+    class RoomLeft <<local mirror>>
+  }
+
+  Round "1" *-- "many" Answer
+  Round --> RoundStatus
+  Answer --> AnswerResult
+  ScoringService ..> Round
+  ScoringService ..> Answer
+  StartRoundCommand ..|> Command
+  SubmitAnswerCommand ..|> Command
+  RoundStarted --|> DomainEvent
+  AnswerSubmitted --|> DomainEvent
+  AnswerRejected --|> DomainEvent
+  RoundEnded --|> DomainEvent
+  GameEnded --|> DomainEvent
+  RoomJoined --|> DomainEvent
+  RoomLeft --|> DomainEvent
+}
+
+package "app" {
+  interface CommandBus
+  interface EventBus
+  interface "CommandHandler<C,R>" as CommandHandler
+  interface RoundRepository {
+    +save(Round): Round
+    +findById(String): Optional<Round>
+    +findActiveRoundByRoomId(String): Optional<Round>
+    +findByRoomId(String): List<Round>
+  }
+  interface AnswerValidationPort {
+    +isCorrect(String, String): boolean
+  }
+  interface RoomReadModelPort {
+    +findByRoomId(String): Optional<RoomSnapshot>
+    +isParticipant(String, String): boolean
+    +markGameStarted(String)
+  }
+  interface ConceptBankReadModelPort {
+    +pickRandomConcept(String): ConceptSnapshot
+  }
+  interface TimerPort {
+    +cancelTimers(String)
+  }
+  interface RoundEndGuard {
+    +tryClaim(String): boolean
+    +release(String)
+  }
+  interface GameStateStore {
+    +loadOrCreate(String): GameState
+    +find(String): GameState
+    +save(GameState)
+    +remove(String)
+    +getActiveRound(String): String
+    +setActiveRound(String, String)
+    +addAnswered(String, String): boolean
+    +answeredCount(String): int
+  }
+  interface GameStateLock {
+    +runExclusively(String, Runnable)
+  }
+  interface SessionQueryService {
+    +getResultsByUser(String): List<SessionResultDto>
+    +getResultsByRoom(String): List<SessionResultDto>
+  }
+  class GameState {
+    -roomId: String
+    -participants: Set<String>
+    -currentRound: int
+    -totalRounds: int
+    -scores: Map<String,Integer>
+    -ended: boolean
+  }
+
+  class StartRoundCommandHandler
+  class SubmitAnswerCommandHandler
+  class GameSaga {
+    +subscribe() <<@PostConstruct>>
+    +getScores(String): Map<String,Integer>
+  }
+
+  StartRoundCommandHandler ..|> CommandHandler
+  SubmitAnswerCommandHandler ..|> CommandHandler
+  StartRoundCommandHandler --> RoundRepository
+  StartRoundCommandHandler --> RoomReadModelPort
+  StartRoundCommandHandler --> ConceptBankReadModelPort
+  StartRoundCommandHandler --> EventBus
+  SubmitAnswerCommandHandler --> RoundRepository
+  SubmitAnswerCommandHandler --> RoomReadModelPort
+  SubmitAnswerCommandHandler --> AnswerValidationPort
+  SubmitAnswerCommandHandler --> EventBus
+  GameSaga --> EventBus
+  GameSaga --> CommandBus
+  GameSaga --> RoundRepository
+  GameSaga --> TimerPort
+  GameSaga --> RoundEndGuard
+  GameSaga --> GameStateStore
+  GameSaga --> GameStateLock
+  GameSaga ..> GameState : orquesta
+  GameStateStore ..> GameState
+}
+
+package "infra" {
+  package "answer" {
+    class NormalizingAnswerValidator {
+      +isCorrect(String,String): boolean
+      -normalize(String): String {static}
+    }
+    note right: minúsculas + sin tildes\n(NFD + strip diacríticos)\nen AMBOS lados de la comparación
+    NormalizingAnswerValidator ..|> AnswerValidationPort
+  }
+
+  package "state" {
+    class InMemoryGameStateStore
+    class RedisGameStateStore
+    class InMemoryGameStateLock
+    class RedisGameStateLock
+    class InMemoryRoundEndGuard
+    class RedisRoundEndGuard
+    InMemoryGameStateStore ..|> GameStateStore
+    RedisGameStateStore ..|> GameStateStore
+    InMemoryGameStateLock ..|> GameStateLock
+    RedisGameStateLock ..|> GameStateLock
+    InMemoryRoundEndGuard ..|> RoundEndGuard
+    RedisRoundEndGuard ..|> RoundEndGuard
+  }
+
+  package "timer" {
+    class ScheduledTimerAdapter {
+      +onRoundStarted(RoundStarted) <<@PostConstruct subscribe>>
+    }
+    ScheduledTimerAdapter ..|> TimerPort
+    ScheduledTimerAdapter --> RoundRepository
+    ScheduledTimerAdapter --> RoundEndGuard
+    ScheduledTimerAdapter --> EventBus
+  }
+
+  package "ws" {
+    class GameWebSocketHandler <<TextWebSocketHandler>>
+    class GameStompConfig <<WebSocketMessageBrokerConfigurer>>
+    class RawWebSocketConfig <<WebSocketConfigurer>>
+    class StompGameNotificationAdapter
+    class WsConnectionRateLimitInterceptor <<HandshakeInterceptor>>
+    interface AnswerRateLimiter {
+      +allow(String): boolean
+    }
+    class InMemoryAnswerRateLimiter
+    class RedisAnswerRateLimiter
+
+    GameWebSocketHandler --> CommandBus
+    GameWebSocketHandler --> AnswerRateLimiter
+    InMemoryAnswerRateLimiter ..|> AnswerRateLimiter
+    RedisAnswerRateLimiter ..|> AnswerRateLimiter
+    StompGameNotificationAdapter ..> RoundStarted : escucha
+    StompGameNotificationAdapter ..> RoundEnded : escucha
+  }
+
+  package "persistence" {
+    class RoundRepositoryImpl
+    class RoundMapper
+    class RoundEntity <<@Entity>>
+    class AnswerEntity <<@Entity>>
+    class SessionResultEntity <<@Entity>> {
+      +@UniqueConstraint(roomId,userId)
+    }
+    interface SpringDataRoundRepository
+    interface SpringDataSessionResultRepository
+    class SessionQueryServiceImpl
+    class SessionResultEventHandler
+
+    RoundRepositoryImpl ..|> RoundRepository
+    RoundRepositoryImpl --> SpringDataRoundRepository
+    RoundRepositoryImpl --> RoundMapper
+    RoundEntity "1" *-- "many" AnswerEntity
+    SessionQueryServiceImpl ..|> SessionQueryService
+    SessionQueryServiceImpl --> SpringDataSessionResultRepository
+    SessionResultEventHandler ..> GameEnded : subscribe (idempotente)
+    SessionResultEventHandler --> SpringDataSessionResultRepository
+  }
+
+  package "readmodel" {
+    class RoomReadModelAdapter
+    class ConceptBankReadModelAdapter
+    class RoomReadModelEventConsumer <<@RabbitListener>>
+    class ConceptBankReadModelEventConsumer <<@RabbitListener>>
+    class RoomReadModelEntity <<@Entity>>
+    class ParticipantReadModelEntity <<@Entity>>
+    class ConceptBankReadModelEntity <<@Entity>>
+    class ConceptReadModelEntity <<@Entity>>
+    class ProcessedEventEntity <<@Entity>> {
+      ledger de idempotencia
+    }
+    interface JpaRoomReadModelRepository
+    interface JpaParticipantReadModelRepository
+    interface JpaConceptBankReadModelRepository
+    interface JpaConceptReadModelRepository
+    interface JpaProcessedEventRepository
+
+    RoomReadModelAdapter ..|> RoomReadModelPort
+    ConceptBankReadModelAdapter ..|> ConceptBankReadModelPort
+    RoomReadModelAdapter --> JpaRoomReadModelRepository
+    RoomReadModelAdapter --> JpaParticipantReadModelRepository
+    ConceptBankReadModelAdapter --> JpaConceptBankReadModelRepository
+    ConceptBankReadModelAdapter --> JpaConceptReadModelRepository
+    RoomReadModelEventConsumer --> JpaProcessedEventRepository : dedup por eventId
+    RoomReadModelEventConsumer --> JpaRoomReadModelRepository
+    RoomReadModelEventConsumer --> JpaParticipantReadModelRepository
+    RoomReadModelEventConsumer ..> EventBus : re-publica localmente
+    ConceptBankReadModelEventConsumer --> JpaConceptBankReadModelRepository
+  }
+
+  package "messaging.outbox" {
+    class OutboxEvent <<@Entity>>
+    interface OutboxEventRepository
+    class OutboxEventPublisher
+    class OutboxWritingEventHandler
+    OutboxWritingEventHandler ..> RoundStarted : subscribe
+    OutboxWritingEventHandler ..> AnswerSubmitted : subscribe
+    OutboxWritingEventHandler ..> RoundEnded : subscribe
+    OutboxWritingEventHandler ..> GameEnded : subscribe
+  }
+
+  package "messaging.config" {
+    class RabbitTopologyConfig {
+      DLX + DLQ (game-engine.dlq)
+      colas de auditoría
+    }
+  }
+
+  package "bus" {
+    class InMemoryCommandBus
+    class InMemoryEventBus
+    InMemoryCommandBus ..|> CommandBus
+    InMemoryEventBus ..|> EventBus
+  }
+
+  package "config" {
+    class CacheConfig <<Caffeine>>
+    class BusConfig
+    class JacksonConfig
+    class WebMvcConfig
+  }
+
+  package "security" {
+    class SecurityConfig
+    class CorrelationIdFilter <<OncePerRequestFilter>>
+  }
+}
+
+package "web" {
+  class GameController {
+    +startRound(String, Principal)
+    +submitAnswer(String, SubmitAnswerRequest, Principal)
+    +getRanking(String): ApiResponse<Map>
+  }
+  class SessionController {
+    +getResultsByUser(String)
+    +getResultsByRoom(String)
+  }
+  class GlobalExceptionHandler <<@RestControllerAdvice>>
+  class "ApiResponse<T>" as ApiResponse
+
+  GameController --> CommandBus
+  GameController --> GameSaga
+  GameController --> AnswerRateLimiter
+  SessionController --> SessionQueryService
+}
+
+@enduml

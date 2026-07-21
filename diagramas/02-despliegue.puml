@@ -1,0 +1,95 @@
+@startuml 02-despliegue
+title ConceptArena — Diagrama de despliegue (estado real, Azure)
+skinparam shadowing false
+skinparam nodeStyle rectangle
+skinparam databaseStyle rectangle
+skinparam actorStyle awesome
+
+actor "Desarrollador" as Dev
+actor "Jugadores\n(compañeros)" as Players
+
+node "GitHub" as GitHub {
+  artifact "Exael74/CONCEPT-ARENA\n(rama main)" as Repo
+  node "GitHub Actions runner\n(ubuntu-latest)" as Runner {
+    rectangle "build-and-test\nmvn clean test +\nTestcontainers" as JobTest
+    rectangle "compose-validation\nvalida YAML/JSON" as JobValidate
+    rectangle "deploy\nrsync + SSH +\ndocker compose up -d --build" as JobDeploy
+  }
+  JobTest --> JobValidate
+  JobValidate --> JobDeploy : solo si pasan\n(push a main)
+}
+
+cloud "Microsoft Azure — Suscripción \"Azure for Students\"" as Azure {
+  node "Resource Group: conceptarena-rg\n(región: eastus2)" as RG {
+    node "VM: conceptarena-backend\nStandard_D4s_v3 (4 vCPU / 16 GB)\nUbuntu 22.04 LTS + Docker Engine" as VM {
+
+      node "docker-compose.backend.yml" as Compose {
+        component "api-gateway\n:8080 (público)" as GW #3B82F6
+        component "auth-service :8081" as AUTH #7C3AED
+        component "room-service :8082" as ROOM #7C3AED
+        component "game-engine-service :8083" as GAME #7C3AED
+        component "concept-bank-service :8084" as BANK #7C3AED
+        component "voice-signaling-service :8085" as VOICE #7C3AED
+
+        database "auth-db" as AUTHDB
+        database "room-outbox-db" as ROOMDB
+        database "game-db" as GAMEDB
+        database "conceptbank-db" as BANKDB
+        database "auth-redis" as AUTHREDIS
+        database "room-redis" as ROOMREDIS
+        database "game-redis" as GAMEREDIS
+        database "voice-redis" as VOICEREDIS
+        database "gateway-redis" as GWREDIS
+        queue "rabbitmq" as MQ
+        component "mailhog\n:8025 (127.0.0.1)" as MAILHOG
+
+        GW --> AUTH
+        GW --> ROOM
+        GW --> GAME
+        GW --> BANK
+        GW --> VOICE
+        AUTH --> AUTHDB
+        AUTH --> AUTHREDIS
+        AUTH ..> MAILHOG
+        ROOM --> ROOMDB
+        ROOM --> ROOMREDIS
+        GAME --> GAMEDB
+        GAME --> GAMEREDIS
+        BANK --> BANKDB
+        VOICE --> VOICEREDIS
+        GW --> GWREDIS
+        AUTH ..> MQ
+        ROOM ..> MQ
+        GAME ..> MQ
+        BANK ..> MQ
+      }
+    }
+    node "Network Security Group" as NSG {
+      note as NSGNote
+        Puerto 8080 (api-gateway): abierto a Internet
+        Puerto 22 (SSH): abierto (deploy + administración)
+        Puertos 8081-8085, 5672, 15672, 8025, redis: solo 127.0.0.1
+      end note
+    }
+    node "IP pública estática\n104.46.113.22" as PublicIP
+  }
+}
+
+Dev --> Repo : git push
+Repo --> Runner : dispara workflow\n(on: push a main)
+JobDeploy --> VM : SSH (usuario azureuser,\nclave privada en secret\nAZURE_VM_SSH_KEY)
+JobDeploy ..> GW : polling GET /actuator/health\nhasta 200 OK
+
+Players --> PublicIP : HTTP :8080\n(vía frontend desplegado aparte)
+PublicIP --> NSG
+NSG --> GW
+
+note bottom of Compose
+  docker-compose.backend.yml — variante SIN frontend
+  ni stack de observabilidad (Prometheus/Grafana/Loki/
+  Zipkin viven en docker-compose.yml, no desplegados
+  hoy en esta VM). JWT_SECRET vive en ~/conceptarena/.env
+  en la VM, excluido del rsync (no se pisa en cada deploy).
+end note
+
+@enduml

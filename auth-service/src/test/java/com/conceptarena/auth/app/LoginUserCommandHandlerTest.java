@@ -37,7 +37,9 @@ class LoginUserCommandHandlerTest {
     }
 
     private User activeUser() {
-        return User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
+        user.activate();
+        return user;
     }
 
     @Test
@@ -79,9 +81,8 @@ class LoginUserCommandHandlerTest {
     }
 
     @Test
-    void rejectsDeactivatedUserEvenWithCorrectPassword() {
-        User user = activeUser();
-        user.deactivate();
+    void rejectsUnverifiedUserEvenWithCorrectPassword() {
+        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
         when(userRepository.findByEmail("student@escuelaing.edu.co")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("hashed-plain", "hashed")).thenReturn(true);
 

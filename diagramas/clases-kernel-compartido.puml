@@ -1,0 +1,83 @@
+@startuml clases-kernel-compartido
+title conceptarena-kernel + jwt-validation-lib — Clases compartidas
+skinparam packageStyle rectangle
+skinparam shadowing false
+hide empty members
+
+package "conceptarena-kernel (sin dependencias Spring)" {
+  abstract class BaseEntity {
+    -EntityId id
+    +id(): EntityId
+    +equals(Object): boolean
+    +hashCode(): int
+  }
+
+  interface ValueObject <<marker>>
+
+  class EntityId <<record>> {
+    +value: String
+    +generate(): EntityId {static}
+    +from(String): EntityId {static}
+  }
+
+  class PasswordHash <<record>> {
+    +value: String
+    +fromPlain(String): PasswordHash {static}
+  }
+
+  interface PasswordVerifier {
+    +matches(String, String): boolean
+  }
+
+  interface Command<T> <<marker>>
+
+  abstract class DomainEvent {
+    -eventId: String
+    -occurredOn: Instant
+    -aggregateId: String
+    +getEventId(): String
+    +getOccurredOn(): Instant
+    +getAggregateId(): String
+  }
+
+  class DomainException <<RuntimeException>>
+
+  BaseEntity --> EntityId : id
+  DomainException --|> RuntimeException
+}
+
+package "jwt-validation-lib (Spring Security / WS)" {
+  class JwtValidator {
+    -secret: String
+    +validate(String): Optional<String>
+  }
+
+  class JwtBearerAuthenticationFilter <<OncePerRequestFilter>> {
+    +doFilterInternal(...)
+  }
+
+  class WsJwtHandshakeInterceptor <<HandshakeInterceptor>> {
+    +WS_USER_ID_ATTRIBUTE: String {static}
+    +beforeHandshake(...): boolean
+  }
+
+  JwtBearerAuthenticationFilter --> JwtValidator
+  WsJwtHandshakeInterceptor --> JwtValidator
+}
+
+note bottom of ValueObject
+  Los value objects del dominio (Email, EntityId, PasswordHash)
+  son records de Java: igualdad por valor + inmutabilidad ya
+  vienen del lenguaje; ValueObject es solo un marcador semántico.
+end note
+
+note "usado por auth-service,\nroom-service, game-engine-service,\nconcept-bank-service" as N1
+BaseEntity .. N1
+Command .. N1
+DomainEvent .. N1
+DomainException .. N1
+
+note "usado por room-service,\ngame-engine-service,\nvoice-signaling-service,\napi-gateway" as N2
+JwtValidator .. N2
+
+@enduml
