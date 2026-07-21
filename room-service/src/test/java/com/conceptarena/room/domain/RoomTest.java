@@ -27,6 +27,14 @@ class RoomTest {
     }
 
     @Test
+    void createRejectsBlankConceptBankId() {
+        assertThatThrownBy(() -> Room.create("Study Room", RoomType.PUBLIC, null, "creator-1", "  ", 4))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Room.create("Study Room", RoomType.PUBLIC, null, "creator-1", null, 4))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void createTrimsName() {
         Room room = Room.create("  Study Room  ", RoomType.PUBLIC, null, "creator-1", "bank-1", 4);
         assertThat(room.getName()).isEqualTo("Study Room");

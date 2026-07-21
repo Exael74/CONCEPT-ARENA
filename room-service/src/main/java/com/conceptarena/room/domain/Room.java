@@ -43,6 +43,9 @@ public class Room {
         if (maxParticipants <= 0) {
             throw new IllegalArgumentException("maxParticipants must be greater than 0");
         }
+        if (conceptBankId == null || conceptBankId.isBlank()) {
+            throw new IllegalArgumentException("conceptBankId must not be empty");
+        }
         return new Room(EntityId.generate(), name.trim(), type, inviteCode, creatorUserId, conceptBankId, maxParticipants, RoomStatus.WAITING);
     }
 
