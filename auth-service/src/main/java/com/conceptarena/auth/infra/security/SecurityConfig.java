@@ -46,6 +46,8 @@ public class SecurityConfig {
             .headers(headers -> headers.frameOptions(fo -> fo.disable())) // for H2 console in dev
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // Must come before the /api/auth/** permitAll below — first-match-wins ordering.
+                .requestMatchers("/api/auth/me/**").authenticated()
                 .requestMatchers("/api/auth/**", "/actuator/**", "/h2-console/**").permitAll()
                 .anyRequest().authenticated()
             )

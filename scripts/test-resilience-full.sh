@@ -41,11 +41,26 @@ pass "gateway is up"
 # ---------------------------------------------------------------------------------------------------
 step "Baseline: a write publishes an event (outbox -> RabbitMQ)"
 EMAIL="resil-$(date +%s)@escuelaing.edu.co"
+USERNAME="resil$(date +%s)"
+MAILHOG="${MAILHOG:-http://localhost:8025}"
 curl -fsS -X POST "$GATEWAY/api/auth/register" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$EMAIL\",\"password\":\"password123\"}" >/dev/null || true
-TOKEN=$(curl -fsS -X POST "$GATEWAY/api/auth/login" -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$EMAIL\",\"password\":\"password123\"}" | jq -r '.data')
-[ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] && pass "registered + logged in" || fail "could not obtain a token"
+  -d "{\"email\":\"$EMAIL\",\"username\":\"$USERNAME\",\"password\":\"password123\"}" >/dev/null || true
+
+# Registration creates an INACTIVE account (see auth-service VerifyOtpCommandHandler) — it must be
+# verified via the OTP emailed to MailHog before it can authenticate. Poll for the mail, decode the
+# quoted-printable body (soft line breaks can otherwise split the 6-digit code), and verify.
+CODE=""
+for _ in $(seq 1 10); do
+  CODE=$(curl -fsS "$MAILHOG/api/v2/search?kind=to&query=$EMAIL" 2>/dev/null \
+    | jq -r '.items[0].Content.Body // empty' \
+    | sed ':a;N;$!ba;s/=\r\{0,1\}\n//g' \
+    | grep -oE '[0-9]{6}' | head -1) || true
+  [ -n "$CODE" ] && break
+  sleep 1
+done
+TOKEN=$(curl -fsS -X POST "$GATEWAY/api/auth/otp/verify" -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$EMAIL\",\"code\":\"$CODE\"}" | jq -r '.data')
+[ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] && pass "registered + OTP-verified" || fail "could not obtain a token"
 
 BANK=$(curl -fsS -X POST "$GATEWAY/api/concept-banks" -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.conceptarena.auth.app.bus.EventBus;
 import com.conceptarena.auth.domain.Email;
 import com.conceptarena.auth.domain.User;
+import com.conceptarena.auth.domain.Username;
 import com.conceptarena.auth.domain.command.LoginUserCommand;
 import com.conceptarena.auth.domain.error.InvalidCredentialsException;
 import com.conceptarena.auth.domain.event.UserLoggedIn;
@@ -37,7 +38,7 @@ class LoginUserCommandHandlerTest {
     }
 
     private User activeUser() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromHash("hashed"));
         user.activate();
         return user;
     }
@@ -82,7 +83,7 @@ class LoginUserCommandHandlerTest {
 
     @Test
     void rejectsUnverifiedUserEvenWithCorrectPassword() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromHash("hashed"));
         when(userRepository.findByEmail("student@escuelaing.edu.co")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("hashed-plain", "hashed")).thenReturn(true);
 

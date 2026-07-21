@@ -19,6 +19,7 @@ import { Counter, Trend } from 'k6/metrics';
 import encoding from 'k6/encoding';
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const MAILHOG_URL = __ENV.MAILHOG_URL || 'http://localhost:8025';
 const PLAYERS = 30;
 
 // http_req_failed must flag SERVER failures (5xx), not the game's legitimate business rejections: a
@@ -103,12 +104,34 @@ export default function (data) {
 // outside the rate limiter's window: a fixed-window limiter's reset boundary doesn't line up
 // predictably with evenly-spaced sleeps (found by actually running this — pacing alone still hit
 // 429s intermittently near a window edge), so treat 429 as expected/retryable, not fatal.
+// Registration now requires a username and creates an INACTIVE account (see auth-service
+// VerifyOtpCommandHandler) — it must be OTP-verified before it can authenticate. Verify returns a
+// JWT directly, so this polls MailHog for the emailed code instead of calling /api/auth/login.
+function fetchOtpCode(email) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const res = http.get(`${MAILHOG_URL}/api/v2/search?kind=to&query=${email}`);
+        if (res.status === 200) {
+            const body = JSON.parse(res.body);
+            const raw = body.items && body.items[0] && body.items[0].Content && body.items[0].Content.Body;
+            if (raw) {
+                const decoded = raw.replace(/=\r?\n/g, '');
+                const match = decoded.match(/\d{6}/);
+                if (match) return match[0];
+            }
+        }
+        sleep(1);
+    }
+    throw new Error(`fetchOtpCode(${email}): no OTP email found in MailHog after 10 attempts`);
+}
+
 function registerAndLogin(email) {
+    const username = `p${Date.now()}${Math.floor(Math.random() * 1000)}`.slice(0, 20);
     for (let attempt = 0; attempt < 5; attempt++) {
-        http.post(`${BASE_URL}/api/auth/register`, JSON.stringify({ email, password: 'password123' }), {
+        http.post(`${BASE_URL}/api/auth/register`, JSON.stringify({ email, username, password: 'password123' }), {
             headers: { 'Content-Type': 'application/json' },
         });
-        const loginRes = http.post(`${BASE_URL}/api/auth/login`, JSON.stringify({ email, password: 'password123' }), {
+        const code = fetchOtpCode(email);
+        const loginRes = http.post(`${BASE_URL}/api/auth/otp/verify`, JSON.stringify({ email, code }), {
             headers: { 'Content-Type': 'application/json' },
         });
         if (loginRes.status === 429) {

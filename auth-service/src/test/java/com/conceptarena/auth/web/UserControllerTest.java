@@ -42,7 +42,7 @@ class UserControllerTest {
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
-                    new UserController.RegisterUserRequest("student@escuelaing.edu.co", "password123"))))
+                    new UserController.RegisterUserRequest("student@escuelaing.edu.co", "student", "password123"))))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data").value("user-123"));
@@ -55,7 +55,7 @@ class UserControllerTest {
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(
-                    new UserController.RegisterUserRequest("student@escuelaing.edu.co", "password123"))))
+                    new UserController.RegisterUserRequest("student@escuelaing.edu.co", "student", "password123"))))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.success").value(false));
     }

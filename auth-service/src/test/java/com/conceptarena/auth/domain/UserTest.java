@@ -12,23 +12,24 @@ class UserTest {
 
     @Test
     void registerCreatesInactiveUser() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromHash("hashed"));
         assertThat(user.isActive()).isFalse();
         assertThat(user.getEmail().value()).isEqualTo("student@escuelaing.edu.co");
+        assertThat(user.getUsername().value()).isEqualTo("student");
         assertThat(user.getId()).isNotNull();
         assertThat(user.getRegisteredAt()).isNotNull();
     }
 
     @Test
     void activateMarksUserActive() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromHash("hashed"));
         user.activate();
         assertThat(user.isActive()).isTrue();
     }
 
     @Test
     void authenticateSucceedsWithMatchingPasswordAndActiveUser() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromHash("hashed"));
         user.activate();
         boolean result = user.authenticate(PasswordHash.fromPlain("hashed"), EXACT_MATCH);
         assertThat(result).isTrue();
@@ -36,14 +37,14 @@ class UserTest {
 
     @Test
     void authenticateFailsForUnverifiedUserEvenWithCorrectPassword() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromHash("hashed"));
         boolean result = user.authenticate(PasswordHash.fromPlain("hashed"), EXACT_MATCH);
         assertThat(result).isFalse();
     }
 
     @Test
     void authenticateFailsWithWrongPassword() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromHash("hashed"));
         user.activate();
         boolean result = user.authenticate(PasswordHash.fromPlain("wrong"), EXACT_MATCH);
         assertThat(result).isFalse();
@@ -51,7 +52,7 @@ class UserTest {
 
     @Test
     void deactivatedUserCannotAuthenticateEvenWithCorrectPassword() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("hashed"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromHash("hashed"));
         user.activate();
         user.deactivate();
         boolean result = user.authenticate(PasswordHash.fromPlain("hashed"), EXACT_MATCH);
@@ -60,7 +61,7 @@ class UserTest {
 
     @Test
     void changePasswordUpdatesHash() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromHash("old"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromHash("old"));
         user.changePassword(PasswordHash.fromHash("new"));
         assertThat(user.getPasswordHash().value()).isEqualTo("new");
     }

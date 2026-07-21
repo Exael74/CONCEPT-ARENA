@@ -2,9 +2,11 @@ package com.conceptarena.auth.web;
 
 import com.conceptarena.auth.app.bus.CommandBus;
 import com.conceptarena.auth.domain.Email;
+import com.conceptarena.auth.domain.Username;
 import com.conceptarena.auth.domain.command.LoginUserCommand;
 import com.conceptarena.auth.domain.command.RegisterUserCommand;
 import com.conceptarena.auth.domain.error.DuplicateEmailException;
+import com.conceptarena.auth.domain.error.DuplicateUsernameException;
 import com.conceptarena.auth.domain.error.InvalidCredentialsException;
 import com.conceptarena.auth.web.dto.ApiResponse;
 import com.conceptarena.kernel.error.DomainException;
@@ -28,12 +30,13 @@ public class UserController {
         try {
             var command = new RegisterUserCommand(
                 new Email(request.email()),
+                new Username(request.username()),
                 PasswordHash.fromPlain(request.password())
             );
             String userId = commandBus.dispatch(command);
             return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("User registered", userId));
-        } catch (DuplicateEmailException e) {
+        } catch (DuplicateEmailException | DuplicateUsernameException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(e.getMessage()));
         } catch (DomainException e) {
@@ -69,6 +72,6 @@ public class UserController {
         }
     }
 
-    public record RegisterUserRequest(String email, String password) {}
+    public record RegisterUserRequest(String email, String username, String password) {}
     public record LoginUserRequest(String email, String password) {}
 }

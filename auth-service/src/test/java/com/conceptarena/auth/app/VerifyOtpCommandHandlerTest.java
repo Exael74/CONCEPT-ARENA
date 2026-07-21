@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.conceptarena.auth.app.bus.EventBus;
 import com.conceptarena.auth.domain.Email;
 import com.conceptarena.auth.domain.User;
+import com.conceptarena.auth.domain.Username;
 import com.conceptarena.auth.domain.command.VerifyOtpCommand;
 import com.conceptarena.auth.domain.error.InvalidOtpException;
 import com.conceptarena.auth.domain.event.UserLoggedIn;
@@ -40,7 +41,7 @@ class VerifyOtpCommandHandlerTest {
 
     /** A freshly-registered account: inactive until OTP verification (User.register()). */
     private User unverifiedUser() {
-        return User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromPlain("password123"));
+        return User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromPlain("password123"));
     }
 
     @Test

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.conceptarena.auth.domain.Email;
 import com.conceptarena.auth.domain.User;
+import com.conceptarena.auth.domain.Username;
 import com.conceptarena.auth.domain.command.RequestOtpCommand;
 import com.conceptarena.kernel.valueobject.PasswordHash;
 import java.util.Optional;
@@ -32,7 +33,7 @@ class RequestOtpCommandHandlerTest {
 
     @Test
     void issuesANewCodeForARegisteredButUnverifiedUser() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromPlain("password123"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromPlain("password123"));
         when(userRepository.findByEmail("student@escuelaing.edu.co")).thenReturn(Optional.of(user));
 
         handler.handle(new RequestOtpCommand(new Email("student@escuelaing.edu.co")));
@@ -51,7 +52,7 @@ class RequestOtpCommandHandlerTest {
 
     @Test
     void doesNothingAndDoesNotLeakWhenAccountIsAlreadyVerified() {
-        User user = User.register(new Email("student@escuelaing.edu.co"), PasswordHash.fromPlain("password123"));
+        User user = User.register(new Email("student@escuelaing.edu.co"), new Username("student"), PasswordHash.fromPlain("password123"));
         user.activate();
         when(userRepository.findByEmail("student@escuelaing.edu.co")).thenReturn(Optional.of(user));
 

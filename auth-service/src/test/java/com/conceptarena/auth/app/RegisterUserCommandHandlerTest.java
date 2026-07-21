@@ -11,8 +11,10 @@ import static org.mockito.Mockito.when;
 import com.conceptarena.auth.app.bus.EventBus;
 import com.conceptarena.auth.domain.Email;
 import com.conceptarena.auth.domain.User;
+import com.conceptarena.auth.domain.Username;
 import com.conceptarena.auth.domain.command.RegisterUserCommand;
 import com.conceptarena.auth.domain.error.DuplicateEmailException;
+import com.conceptarena.auth.domain.error.DuplicateUsernameException;
 import com.conceptarena.auth.domain.event.UserRegistered;
 import com.conceptarena.kernel.valueobject.PasswordHash;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,10 +43,11 @@ class RegisterUserCommandHandlerTest {
     @Test
     void registersInactiveUserPublishesEventAndIssuesFirstOtpWhenEmailIsAvailable() {
         when(userRepository.existsByEmail("new@escuelaing.edu.co")).thenReturn(false);
+        when(userRepository.existsByUsername("newstudent")).thenReturn(false);
         when(passwordEncoder.encode("plain-password")).thenReturn("hashed-password");
 
         RegisterUserCommand command = new RegisterUserCommand(
-            new Email("new@escuelaing.edu.co"), PasswordHash.fromPlain("plain-password"));
+            new Email("new@escuelaing.edu.co"), new Username("newstudent"), PasswordHash.fromPlain("plain-password"));
 
         String userId = handler.handle(command);
 
@@ -52,6 +55,7 @@ class RegisterUserCommandHandlerTest {
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(saved.capture());
         assertThat(saved.getValue().isActive()).isFalse();
+        assertThat(saved.getValue().getUsername().value()).isEqualTo("newstudent");
         verify(eventBus).publish(any(UserRegistered.class));
         verify(otpCodeIssuer).issue(eq("new@escuelaing.edu.co"));
     }
@@ -61,9 +65,21 @@ class RegisterUserCommandHandlerTest {
         when(userRepository.existsByEmail("taken@escuelaing.edu.co")).thenReturn(true);
 
         RegisterUserCommand command = new RegisterUserCommand(
-            new Email("taken@escuelaing.edu.co"), PasswordHash.fromPlain("plain-password"));
+            new Email("taken@escuelaing.edu.co"), new Username("taken"), PasswordHash.fromPlain("plain-password"));
 
         assertThatThrownBy(() -> handler.handle(command)).isInstanceOf(DuplicateEmailException.class);
+        verify(otpCodeIssuer, never()).issue(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void rejectsRegistrationWhenUsernameAlreadyExists() {
+        when(userRepository.existsByEmail("new@escuelaing.edu.co")).thenReturn(false);
+        when(userRepository.existsByUsername("taken")).thenReturn(true);
+
+        RegisterUserCommand command = new RegisterUserCommand(
+            new Email("new@escuelaing.edu.co"), new Username("taken"), PasswordHash.fromPlain("plain-password"));
+
+        assertThatThrownBy(() -> handler.handle(command)).isInstanceOf(DuplicateUsernameException.class);
         verify(otpCodeIssuer, never()).issue(org.mockito.ArgumentMatchers.anyString());
     }
 }

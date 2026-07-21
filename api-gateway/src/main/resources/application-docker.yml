@@ -23,6 +23,10 @@ spring:
           uri: http://game-engine-service:8083
           predicates:
             - Path=/api/game/**,/api/sessions/**
+        - id: voice-signaling-service-rest
+          uri: http://voice-signaling-service:8085
+          predicates:
+            - Path=/api/signaling/**
         - id: room-service-ws
           uri: ws://room-service:8082
           predicates:

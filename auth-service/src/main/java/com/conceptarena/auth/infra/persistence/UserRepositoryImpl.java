@@ -37,6 +37,12 @@ public class UserRepositoryImpl implements UserRepository {
 
     @Override
     @Transactional(readOnly = true)
+    public boolean existsByUsername(String username) {
+        return jpaRepository.existsByUsername(username);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<User> findById(String id) {
         return jpaRepository.findById(id).map(UserMapper::toDomain);
     }

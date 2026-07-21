@@ -5,6 +5,7 @@ import com.conceptarena.auth.app.bus.EventBus;
 import com.conceptarena.auth.domain.User;
 import com.conceptarena.auth.domain.command.RegisterUserCommand;
 import com.conceptarena.auth.domain.error.DuplicateEmailException;
+import com.conceptarena.auth.domain.error.DuplicateUsernameException;
 import com.conceptarena.auth.domain.event.UserRegistered;
 import com.conceptarena.kernel.valueobject.PasswordHash;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -39,10 +40,13 @@ public class RegisterUserCommandHandler implements CommandHandler<RegisterUserCo
         if (userRepository.existsByEmail(command.email().value())) {
             throw new DuplicateEmailException(command.email().value());
         }
+        if (userRepository.existsByUsername(command.username().value())) {
+            throw new DuplicateUsernameException(command.username().value());
+        }
 
         String hashedPassword = passwordEncoder.encode(command.passwordHash().value());
         // User.register() creates the account INACTIVE — it must be verified (OTP) before login.
-        User user = User.register(command.email(), PasswordHash.fromHash(hashedPassword));
+        User user = User.register(command.email(), command.username(), PasswordHash.fromHash(hashedPassword));
         userRepository.save(user);
 
         eventBus.publish(new UserRegistered(user.getId().value(), user.getEmail()));

@@ -13,6 +13,9 @@ public class UserEntity {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(nullable = false, unique = true, length = 20)
+    private String username;
+
     @Column(nullable = false)
     private String passwordHash;
 
@@ -24,9 +27,10 @@ public class UserEntity {
 
     public UserEntity() {}
 
-    public UserEntity(String id, String email, String passwordHash, boolean active, Instant registeredAt) {
+    public UserEntity(String id, String email, String username, String passwordHash, boolean active, Instant registeredAt) {
         this.id = id;
         this.email = email;
+        this.username = username;
         this.passwordHash = passwordHash;
         this.active = active;
         this.registeredAt = registeredAt;
@@ -36,6 +40,8 @@ public class UserEntity {
     public void setId(String id) { this.id = id; }
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
     public String getPasswordHash() { return passwordHash; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public boolean isActive() { return active; }

@@ -8,13 +8,15 @@ import java.time.Instant;
 public class User {
     private final EntityId id;
     private final Email email;
+    private Username username;
     private PasswordHash passwordHash;
     private boolean active;
     private final Instant registeredAt;
 
-    private User(EntityId id, Email email, PasswordHash passwordHash, boolean active, Instant registeredAt) {
+    private User(EntityId id, Email email, Username username, PasswordHash passwordHash, boolean active, Instant registeredAt) {
         this.id = id;
         this.email = email;
+        this.username = username;
         this.passwordHash = passwordHash;
         this.active = active;
         this.registeredAt = registeredAt;
@@ -26,12 +28,12 @@ public class User {
      * and authenticate() below both already gate on isActive(), so this single flag change is
      * what turns OTP into "complete your registration" rather than an alternative login method.
      */
-    public static User register(Email email, PasswordHash passwordHash) {
-        return new User(EntityId.generate(), email, passwordHash, false, Instant.now());
+    public static User register(Email email, Username username, PasswordHash passwordHash) {
+        return new User(EntityId.generate(), email, username, passwordHash, false, Instant.now());
     }
 
-    public static User restore(EntityId id, Email email, PasswordHash passwordHash, boolean active, Instant registeredAt) {
-        return new User(id, email, passwordHash, active, registeredAt);
+    public static User restore(EntityId id, Email email, Username username, PasswordHash passwordHash, boolean active, Instant registeredAt) {
+        return new User(id, email, username, passwordHash, active, registeredAt);
     }
 
     public boolean authenticate(PasswordHash rawPassword, PasswordVerifier verifier) {
@@ -51,8 +53,13 @@ public class User {
         this.passwordHash = newPasswordHash;
     }
 
+    public void changeUsername(Username newUsername) {
+        this.username = newUsername;
+    }
+
     public EntityId getId() { return id; }
     public Email getEmail() { return email; }
+    public Username getUsername() { return username; }
     public PasswordHash getPasswordHash() { return passwordHash; }
     public boolean isActive() { return active; }
     public Instant getRegisteredAt() { return registeredAt; }

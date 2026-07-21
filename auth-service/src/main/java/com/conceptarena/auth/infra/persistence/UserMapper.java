@@ -2,6 +2,7 @@ package com.conceptarena.auth.infra.persistence;
 
 import com.conceptarena.auth.domain.Email;
 import com.conceptarena.auth.domain.User;
+import com.conceptarena.auth.domain.Username;
 import com.conceptarena.auth.infra.persistence.jpa.UserEntity;
 import com.conceptarena.kernel.valueobject.EntityId;
 import com.conceptarena.kernel.valueobject.PasswordHash;
@@ -12,6 +13,7 @@ public class UserMapper {
         return new UserEntity(
             domain.getId().value(),
             domain.getEmail().value(),
+            domain.getUsername().value(),
             domain.getPasswordHash().value(),
             domain.isActive(),
             domain.getRegisteredAt()
@@ -22,6 +24,7 @@ public class UserMapper {
         return User.restore(
             EntityId.from(entity.getId()),
             new Email(entity.getEmail()),
+            new Username(entity.getUsername()),
             PasswordHash.fromHash(entity.getPasswordHash()),
             entity.isActive(),
             entity.getRegisteredAt()

@@ -23,6 +23,10 @@ spring:
           uri: ${GAME_SERVICE_URI:http://localhost:8083}
           predicates:
             - Path=/api/game/**,/api/sessions/**
+        - id: voice-signaling-service-rest
+          uri: ${VOICE_SERVICE_URI:http://localhost:8085}
+          predicates:
+            - Path=/api/signaling/**
         # WebSocket routes — see docs/event-contracts.md and each service's RawWebSocketConfig/
         # StompConfig for the exact paths mirrored here. The STOMP endpoints carry the outbound
         # realtime pushes (lobby room list, participants, round/timer events) the frontend
